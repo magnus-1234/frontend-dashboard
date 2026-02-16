@@ -1581,7 +1581,19 @@ class ManageGiftCode(commands.Cog):
             # Get existing codes from database
             self.cursor.execute("SELECT giftcode FROM gift_codes")
             db_codes = {row[0] for row in self.cursor.fetchall()}
-            self.logger.info(f"Found {len(db_codes)} existing codes in database")
+            
+            # Also fetch from MongoDB if enabled
+            if mongo_enabled() and GiftCodesAdapter:
+                try:
+                    # GiftCodesAdapter.get_all() returns list of tuples: (code, date, validation_status)
+                    mongo_codes = GiftCodesAdapter.get_all()
+                    for c in mongo_codes:
+                        if c and c[0]:
+                             db_codes.add(c[0])
+                except Exception as e:
+                    self.logger.error(f"Failed to fetch codes from Mongo: {e}")
+
+            self.logger.info(f"Found {len(db_codes)} existing codes in database(s)")
             
             # Find new codes
             new_codes = []
@@ -2582,8 +2594,8 @@ class ManageGiftCode(commands.Cog):
                 return
             
             # Get current member count
-            self.cursor.execute("SELECT COUNT(*) FROM auto_redeem_members WHERE guild_id = ?", (interaction.guild.id,))
-            member_count = self.cursor.fetchone()[0]
+            members = self.AutoRedeemDB.get_members(self, interaction.guild.id)
+            member_count = len(members)
             
             embed = discord.Embed(
                 title="🤖 Auto Redeem Management",
@@ -2658,8 +2670,8 @@ class ManageGiftCode(commands.Cog):
                 return
             
             # Get current member count
-            self.cursor.execute("SELECT COUNT(*) FROM auto_redeem_members WHERE guild_id = ?", (interaction.guild.id,))
-            member_count = self.cursor.fetchone()[0]
+            members = self.AutoRedeemDB.get_members(self, interaction.guild.id)
+            member_count = len(members)
             
             embed = discord.Embed(
                 title="➕ Add Member to Auto-Redeem",
@@ -2858,8 +2870,8 @@ class ManageGiftCode(commands.Cog):
                 return
             
             # Get current member count
-            self.cursor.execute("SELECT COUNT(*) FROM auto_redeem_members WHERE guild_id = ?", (interaction.guild.id,))
-            member_count = self.cursor.fetchone()[0]
+            members = self.AutoRedeemDB.get_members(self, interaction.guild.id)
+            member_count = len(members)
             
             embed = discord.Embed(
                 title="➖ Remove Member from Auto-Redeem",
@@ -4907,14 +4919,14 @@ class ManageGiftCode(commands.Cog):
                                     if mongo_deleted or sqlite_deleted:
                                         embed = discord.Embed(
                                             title="✅ Code Deleted",
-                                            description=(
-                                                f"**Code:** `{self.code}`\n\n"
-                                                "The gift code has been permanently deleted.\n\n"
-                                                "**Deleted from:**\n"
-                                                f"{'• MongoDB ✅\n' if mongo_deleted else ''}"
-                                                f"{'• SQLite ✅\n' if sqlite_deleted else ''}\n"
-                                                "**Note:** This action cannot be undone."
-                                            ),
+                                                description=(
+                                                    f"**Code:** `{self.code}`\n\n"
+                                                    "The gift code has been permanently deleted.\n\n"
+                                                    "**Deleted from:**\n" +
+                                                    (f"• MongoDB ✅\n" if mongo_deleted else "") +
+                                                    (f"• SQLite ✅\n" if sqlite_deleted else "") +
+                                                    "**Note:** This action cannot be undone."
+                                                ),
                                             color=0x57F287
                                         )
                                         embed.set_footer(

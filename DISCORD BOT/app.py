@@ -35,15 +35,19 @@ def ensure_dependencies_installed():
         print("[ERROR] requirements.txt not found")
         return False
     
+    if os.environ.get('SKIP_INSTALL', '').lower() == 'true':
+        print("[INFO] Skipping dependency installation check (SKIP_INSTALL=true)")
+        return True
+
     print(f"[SETUP] Installing dependencies from: {req_file}")
     try:
         # Install all dependencies quietly
         subprocess.check_call(
-            [sys.executable, "-m", "pip", "install", "--upgrade", "--quiet", 
+            [sys.executable, "-m", "pip", "install", "--upgrade", 
              "--disable-pip-version-check", "-r", req_file],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=1800  # 30 minutes max
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+             timeout=1800  # 30 minutes max
         )
         print("[SETUP] Dependencies installed successfully")
         
@@ -59,7 +63,9 @@ def ensure_dependencies_installed():
         return False
 
 # Install dependencies first
-if not ensure_dependencies_installed():
+if os.environ.get("SKIP_INSTALL", "").lower() == "true":
+    print("[SETUP] Skipping dependency check (SKIP_INSTALL=true)")
+elif not ensure_dependencies_installed():
     print("[ERROR] Failed to install dependencies")
     sys.exit(1)
 
@@ -112,6 +118,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from dotenv import load_dotenv
+load_dotenv()
 import os
 import json
 import logging
@@ -129,7 +136,8 @@ from command_animator import animator
 thinking_animation = ThinkingAnimation()
 try:
     from db.mongo_adapters import mongo_enabled, BirthdaysAdapter
-except Exception:
+except Exception as e:
+    print(f"[ERROR] Failed to import MongoDB adapters: {e}")
     mongo_enabled = lambda: False
     BirthdaysAdapter = None
 import sqlite3
@@ -857,6 +865,7 @@ async def setup_hook():
         "cogs.message_extractor",  # Message extraction for global admins
         "cogs.tictactoe",  # Tic-Tac-Toe game
         "cogs.alliance_monitor",  # Alliance online status monitoring
+        "cogs.debug_mongo_cog",  # Temporary debug cog for MongoDB
     ]
     
     loaded_count = 0
@@ -868,7 +877,7 @@ async def setup_hook():
             logger.info(f"✅ Loaded {cog_name}")
             loaded_count += 1
         except Exception as e:
-            logger.error(f"❌ Failed to load {cog_name}: {e}")
+            logger.error(f"❌ Failed to load {cog_name}: {e}", exc_info=True)
             failed_count += 1
     
     logger.info(f"📦 Cog loading complete: {loaded_count} loaded, {failed_count} failed")
