@@ -273,6 +273,7 @@ class ManageGiftCode(commands.Cog):
 
     async def cog_load(self):
         """Initialize aiohttp session when cog is loaded"""
+        print("DEBUG: cog_load CALLED")
         self.session = aiohttp.ClientSession()
         self.logger.info("ManageGiftCode: Shared aiohttp session initialized.")
         
@@ -1893,9 +1894,11 @@ class ManageGiftCode(commands.Cog):
         - If a code is RECENT (e.g. < 24 hours), we TRIGGER auto-redeem.
         - If a code is OLD, we just MARK it as processed to avoid spam.
         """
+        print("DEBUG: process_existing_codes_on_startup CALLED")
         try:
             # Add a small delay to ensure bot is fully ready
             await asyncio.sleep(5)
+            print("DEBUG: process_existing_codes_on_startup executing after sleep")
             
             self.logger.info("🚀 === STARTUP CODE PROCESSING ===")
             self.logger.info("Checking for unprocessed gift codes...")
