@@ -1936,17 +1936,19 @@ class ManageGiftCode(commands.Cog):
             try:
                 self.logger.info("📂 Fetching from SQLite...")
                 self.cursor.execute("""
-                    SELECT giftcode, date, added_at
+                    SELECT giftcode, date
                     FROM gift_codes 
                     WHERE auto_redeem_processed = 0 OR auto_redeem_processed IS NULL
-                    ORDER BY added_at DESC
+                    ORDER BY date DESC
                 """)
                 sqlite_rows = self.cursor.fetchall()
                 count_sqlite = 0
                 for row in sqlite_rows:
                     giftcode = row[0]
                     if giftcode not in unprocessed_codes:
-                        unprocessed_codes[giftcode] = (row[1], row[2])
+                        # Use date as proxy for created_at if calling code expects 3 items
+                        # But wait, we store (date_str, created_at) in unprocessed_codes dict
+                        unprocessed_codes[giftcode] = (row[1], None) # None for created_at
                         count_sqlite += 1
                 self.logger.info(f"✅ SQLite: Found {count_sqlite} unique unprocessed codes (not in Mongo)")
             except Exception as e:
@@ -1965,32 +1967,35 @@ class ManageGiftCode(commands.Cog):
             now = datetime.now()
             
             for code, (date_str, created_at) in unprocessed_codes.items():
-                # Parse created_at
-                created_at_dt = datetime.min
-                if isinstance(created_at, str):
-                    try:
-                        created_at_dt = datetime.fromisoformat(created_at)
-                    except ValueError:
+                is_recent = False
+                
+                # Check created_at (from MongoDB)
+                if created_at:
+                    created_at_dt = datetime.min
+                    if isinstance(created_at, str):
                         try:
-                            created_at_dt = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S.%f')
+                            created_at_dt = datetime.fromisoformat(created_at)
                         except ValueError:
                             try:
-                                created_at_dt = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
-                            except:
-                                pass
-                elif isinstance(created_at, datetime):
-                    created_at_dt = created_at
+                                created_at_dt = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S.%f')
+                            except ValueError:
+                                try:
+                                    created_at_dt = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
+                                except:
+                                    pass
+                    elif isinstance(created_at, datetime):
+                        created_at_dt = created_at
+                    
+                    if created_at_dt != datetime.min:
+                         age = (now - created_at_dt).total_seconds()
+                         if age < 86400:
+                             is_recent = True
                 
-                # Check age (24 hours = 86400 seconds)
-                # If created_at is min (parsing failed), assume it's OLD to be safe, unless it's very recent in DB? 
-                # Actually, better safe than spammy.
-                age = (now - created_at_dt).total_seconds()
-                is_recent = age < 86400 and created_at_dt != datetime.min # 24 hours
-                
-                # Fallback: if date_str matches today, consider it recent?
+                # Fallback: Check date_str (from SQLite or Mongo)
                 if not is_recent and date_str:
                     try:
                         code_date = datetime.strptime(date_str, '%Y-%m-%d')
+                        # If date is today or yesterday, consider it recent enough to check
                         if (now - code_date).days < 2:
                             is_recent = True
                     except:
