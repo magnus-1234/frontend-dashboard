@@ -273,7 +273,6 @@ class ManageGiftCode(commands.Cog):
 
     async def cog_load(self):
         """Initialize aiohttp session when cog is loaded"""
-        print("DEBUG: cog_load CALLED")
         self.session = aiohttp.ClientSession()
         self.logger.info("ManageGiftCode: Shared aiohttp session initialized.")
         
@@ -1891,81 +1890,70 @@ class ManageGiftCode(commands.Cog):
     async def process_existing_codes_on_startup(self):
         """
         Check for existing codes that haven't been marked as processed.
+        - Fetches from BOTH MongoDB (if enabled) and SQLite to ensure no codes are missed.
         - If a code is RECENT (e.g. < 24 hours), we TRIGGER auto-redeem.
         - If a code is OLD, we just MARK it as processed to avoid spam.
         """
-        print("DEBUG: process_existing_codes_on_startup CALLED")
         try:
             # Add a small delay to ensure bot is fully ready
             await asyncio.sleep(5)
-            print("DEBUG: process_existing_codes_on_startup executing after sleep")
             
             self.logger.info("🚀 === STARTUP CODE PROCESSING ===")
-            self.logger.info("Checking for unprocessed gift codes...")
+            self.logger.info("Checking for unprocessed gift codes in ALL databases...")
             
-            unprocessed_codes = []
+            unprocessed_codes = {} # Use dict for deduplication: code -> (date, created_at)
             
-            # Try MongoDB first - use the new get_all_with_status() method
-            mongo_attempted = False
+            # 1. Fetch from MongoDB
             if mongo_enabled() and GiftCodesAdapter:
                 try:
-                    mongo_attempted = True
-                    self.logger.info("📊 Attempting to fetch codes from MongoDB...")
-                    # Get all codes from MongoDB with their auto_redeem_processed status
+                    self.logger.info("📊 Fetching from MongoDB...")
                     all_codes = GiftCodesAdapter.get_all_with_status()
+                    count_mongo = 0
                     if all_codes:
-                        # Filter for unprocessed codes
-                        unprocessed_codes = [
-                            (code['giftcode'], code.get('date', ''), code.get('created_at'))
-                            for code in all_codes
-                            if not code.get('auto_redeem_processed', False)
-                        ]
-                        self.logger.info(f"✅ MongoDB: Found {len(unprocessed_codes)} unprocessed out of {len(all_codes)} total codes")
-                    else:
-                        self.logger.info("ℹ️ MongoDB: No codes in collection")
+                        for code in all_codes:
+                            if not code.get('auto_redeem_processed', False):
+                                giftcode = code['giftcode']
+                                unprocessed_codes[giftcode] = (code.get('date', ''), code.get('created_at'))
+                                count_mongo += 1
+                    self.logger.info(f"✅ MongoDB: Found {count_mongo} unprocessed codes")
                 except Exception as e:
-                    self.logger.warning(f"⚠️ MongoDB failed: {e}, falling back to SQLite")
-            elif mongo_enabled():
-                self.logger.warning("⚠️ MongoDB enabled but GiftCodesAdapter unavailable")
-            else:
-                self.logger.info("ℹ️ MongoDB not enabled, using SQLite")
+                    self.logger.warning(f"⚠️ MongoDB fetch failed: {e}")
             
-            # Fallback to SQLite if MongoDB failed or not enabled
-            if not unprocessed_codes and (not mongo_enabled() or not GiftCodesAdapter or not mongo_attempted):
-                try:
-                    self.logger.info("📂 Fetching codes from SQLite database...")
-                    self.cursor.execute("""
-                        SELECT giftcode, date, added_at
-                        FROM gift_codes 
-                        WHERE auto_redeem_processed = 0 OR auto_redeem_processed IS NULL
-                        ORDER BY added_at DESC
-                    """)
-                    # SQLite rows are tuples
-                    unprocessed_codes = self.cursor.fetchall()
-                    self.logger.info(f"✅ SQLite: Found {len(unprocessed_codes)} unprocessed codes")
-                except Exception as e:
-                    self.logger.error(f"❌ SQLite fetch failed: {e}")
+            # 2. Fetch from SQLite (ALWAYS check SQLite as backup/primary source)
+            try:
+                self.logger.info("📂 Fetching from SQLite...")
+                self.cursor.execute("""
+                    SELECT giftcode, date, added_at
+                    FROM gift_codes 
+                    WHERE auto_redeem_processed = 0 OR auto_redeem_processed IS NULL
+                    ORDER BY added_at DESC
+                """)
+                sqlite_rows = self.cursor.fetchall()
+                count_sqlite = 0
+                for row in sqlite_rows:
+                    giftcode = row[0]
+                    if giftcode not in unprocessed_codes:
+                        unprocessed_codes[giftcode] = (row[1], row[2])
+                        count_sqlite += 1
+                self.logger.info(f"✅ SQLite: Found {count_sqlite} unique unprocessed codes (not in Mongo)")
+            except Exception as e:
+                self.logger.error(f"❌ SQLite fetch failed: {e}")
             
             if not unprocessed_codes:
-                self.logger.info("✅ No unprocessed codes found (all codes processed or DB empty)")
+                self.logger.info("✅ No unprocessed codes found in any database.")
                 self.logger.info("🏁 === STARTUP CODE PROCESSING COMPLETE ===")
                 return
             
-            self.logger.info(f"📋 FOUND {len(unprocessed_codes)} UNPROCESSED CODES")
+            self.logger.info(f"📋 TOTAL UNPROCESSED CODES FOUND: {len(unprocessed_codes)}")
             
             recent_codes = []
             old_codes = []
             
             now = datetime.now()
             
-            for row in unprocessed_codes:
-                # Handle different formats between Mongo (dict-like access above turned to tuple) and SQLite (tuple)
-                # We standardized to tuple (code, date, created_at) above
-                code = row[0]
-                date_str = row[1]
-                created_at = row[2]
-                
-                # Parse created_at if it's a string (SQLite)
+            for code, (date_str, created_at) in unprocessed_codes.items():
+                # Parse created_at
+                created_at_dt = datetime.min
                 if isinstance(created_at, str):
                     try:
                         created_at_dt = datetime.fromisoformat(created_at)
@@ -1976,16 +1964,25 @@ class ManageGiftCode(commands.Cog):
                             try:
                                 created_at_dt = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
                             except:
-                                created_at_dt = datetime.min
+                                pass
                 elif isinstance(created_at, datetime):
                     created_at_dt = created_at
-                else:
-                    created_at_dt = datetime.min
                 
                 # Check age (24 hours = 86400 seconds)
+                # If created_at is min (parsing failed), assume it's OLD to be safe, unless it's very recent in DB? 
+                # Actually, better safe than spammy.
                 age = (now - created_at_dt).total_seconds()
-                is_recent = age < 86400  # 24 hours
+                is_recent = age < 86400 and created_at_dt != datetime.min # 24 hours
                 
+                # Fallback: if date_str matches today, consider it recent?
+                if not is_recent and date_str:
+                    try:
+                        code_date = datetime.strptime(date_str, '%Y-%m-%d')
+                        if (now - code_date).days < 2:
+                            is_recent = True
+                    except:
+                        pass
+
                 if is_recent:
                     recent_codes.append((code, date_str))
                 else:
