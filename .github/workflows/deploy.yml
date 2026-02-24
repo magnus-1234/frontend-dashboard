@@ -29,14 +29,12 @@ jobs:
           fi
 
       - name: 🔑 Setup SSH key
+        env:
+          ORACLE_SSH_KEY: ${{ secrets.ORACLE_SSH_KEY }}
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.ORACLE_SSH_KEY }}" > ~/.ssh/oracle_vm_key
+          echo "$ORACLE_SSH_KEY" > ~/.ssh/oracle_vm_key
           chmod 600 ~/.ssh/oracle_vm_key
-          # Convert RSA PEM to OpenSSH format if needed
-          ssh-keygen -p -N "" -m pem -f ~/.ssh/oracle_vm_key 2>/dev/null || true
-          # Add host to known_hosts to avoid fingerprint prompt
-          ssh-keyscan -H ${{ secrets.ORACLE_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: 🚀 Deploy via SSH
         env:
