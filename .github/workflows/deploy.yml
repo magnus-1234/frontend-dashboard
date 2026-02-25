@@ -113,7 +113,7 @@ jobs:
             echo "⚠️  'discordbot' not found in PM2. Starting it now..."
             pm2 start "./app.py" \
               --name discordbot \
-              --interpreter "python3" \
+              --interpreter "/home/opc/app/bot/DISCORD BOT/venv/bin/python" \
               --max-memory-restart 700M \
               --time
             pm2 save
