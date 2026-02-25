@@ -111,7 +111,7 @@ jobs:
             echo "✅ Bot restarted successfully"
           else
             echo "⚠️  'discordbot' not found in PM2. Starting it now..."
-            pm2 start "\$BOT_DIR/app.py" \
+            pm2 start "./app.py" \
               --name discordbot \
               --interpreter "\$VENV_DIR/bin/python" \
               --max-memory-restart 700M \
