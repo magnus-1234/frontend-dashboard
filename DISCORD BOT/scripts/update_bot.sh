@@ -8,7 +8,14 @@
 set -e
 
 BOT_DIR="$HOME/app/bot"
-VENV_DIR="$BOT_DIR/venv"
+BOT_DIR="$HOME/app/bot"
+if [ -d "$BOT_DIR/venv" ]; then
+  VENV_DIR="$BOT_DIR/venv"
+elif [ -d "$BOT_DIR/bot_venv" ]; then
+  VENV_DIR="$BOT_DIR/bot_venv"
+else
+  VENV_DIR="$BOT_DIR/venv" # Fallback
+fi
 CACHE_FILE="$HOME/.bot_deps_hash"
 
 cd "$BOT_DIR"
