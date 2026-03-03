@@ -14,7 +14,7 @@ def _get_db():
     if not uri:
         raise ValueError('MONGO_URI not set')
     client = get_mongo_client_sync(uri)
-    db_name = os.getenv('MONGO_DB_NAME', 'discord_bot')
+    db_name = os.getenv('MONGO_DB_NAME', 'reminderbot')
     return client[db_name]
 
 
@@ -23,7 +23,7 @@ async def _get_db_async():
     if not uri:
         raise ValueError('MONGO_URI not set')
     client = await get_mongo_client(uri)
-    db_name = os.getenv('MONGO_DB_NAME', 'discord_bot')
+    db_name = os.getenv('MONGO_DB_NAME', 'reminderbot')
     return client[db_name]
 
 
@@ -627,27 +627,52 @@ class AutoRedeemMembersAdapter:
 
     @staticmethod
     def get_members(guild_id: int) -> List[Dict[str, Any]]:
-        """Get all auto-redeem members for a guild (filters out invalid FIDs)"""
+        """Get all auto-redeem members for a guild with support for hybrid schemas"""
         try:
             db = _get_db()
-            # Query with filter to exclude null/empty FIDs at database level
-            docs = db[AutoRedeemMembersAdapter.COLL].find({
+            members = []
+            seen_fids = set()
+
+            # 1. Fetch flat documents (Schema V2)
+            flat_docs = list(db[AutoRedeemMembersAdapter.COLL].find({
                 'guild_id': int(guild_id),
                 'fid': {'$nin': [None, '', 'None']}
-            })
-            return [
-                {
-                    'fid': d.get('fid'),
-                    'nickname': d.get('nickname'),
-                    'furnace_lv': int(d.get('furnace_lv', 0)),
-                    'avatar_image': d.get('avatar_image', ''),
-                    'added_by': int(d.get('added_by', 0)),
-                    'added_at': d.get('added_at')
-                }
-                for d in docs
-                # Additional Python-level filter as safety
-                if d.get('fid') and str(d.get('fid', '')).strip() and str(d.get('fid', '')).lower() != 'none'
-            ]
+            }))
+            
+            for doc in flat_docs:
+                fid = str(doc.get('fid')).strip()
+                if fid not in seen_fids:
+                    members.append({
+                        'fid': fid,
+                        'nickname': doc.get('nickname', 'Unknown'),
+                        'furnace_lv': int(doc.get('furnace_lv', 0)),
+                        'avatar_image': doc.get('avatar_image', ''),
+                        'added_by': doc.get('added_by'),
+                        'added_at': doc.get('added_at')
+                    })
+                    seen_fids.add(fid)
+
+            # 2. Fetch grouped documents (Schema V1 - legacy)
+            grouped_docs = list(db[AutoRedeemMembersAdapter.COLL].find({
+                'guild_id': int(guild_id),
+                'members': {'$exists': True}
+            }))
+            
+            for gdoc in grouped_docs:
+                for member in gdoc.get('members', []):
+                    fid = str(member.get('fid', '')).strip()
+                    if fid and fid.lower() != 'none' and fid not in seen_fids:
+                        members.append({
+                            'fid': fid,
+                            'nickname': member.get('nickname', 'Unknown'),
+                            'furnace_lv': int(member.get('furnace_lv', 0)),
+                            'avatar_image': member.get('avatar_image', ''),
+                            'added_by': member.get('added_by'),
+                            'added_at': member.get('added_at')
+                        })
+                        seen_fids.add(fid)
+
+            return members
         except Exception as e:
             logger.error(f'Failed to get auto-redeem members for guild {guild_id}: {e}')
             return []
@@ -691,26 +716,45 @@ class AutoRedeemMembersAdapter:
 
     @staticmethod
     def remove_member(guild_id: int, fid: str) -> bool:
-        """Remove a member from auto-redeem list"""
+        """Remove a member from auto-redeem list (Supports both V1 and V2 schema)"""
         try:
             db = _get_db()
-            result = db[AutoRedeemMembersAdapter.COLL].delete_one({
+            # 1. Try removing from V2 (flat)
+            result = db[AutoRedeemMembersAdapter.COLL].delete_many({
                 'guild_id': int(guild_id),
                 'fid': str(fid)
             })
-            return result.deleted_count > 0
+            removed_from_v2 = result.deleted_count > 0
+            
+            # 2. Also try pulling from V1 (grouped)
+            result = db[AutoRedeemMembersAdapter.COLL].update_many(
+                {'guild_id': int(guild_id), 'members.fid': str(fid)},
+                {'$pull': {'members': {'fid': str(fid)}}}
+            )
+            removed_from_v1 = result.modified_count > 0
+            
+            return removed_from_v1 or removed_from_v2
         except Exception as e:
             logger.error(f'Failed to remove auto-redeem member {fid} for guild {guild_id}: {e}')
             return False
 
     @staticmethod
     def member_exists(guild_id: int, fid: str) -> bool:
-        """Check if member exists in auto-redeem list"""
+        """Check if member exists in auto-redeem list (Supports both V1 and V2 schema)"""
         try:
             db = _get_db()
+            # Check V2 (flat) first
             doc = db[AutoRedeemMembersAdapter.COLL].find_one({
                 'guild_id': int(guild_id),
                 'fid': str(fid)
+            })
+            if doc:
+                return True
+            
+            # check V1 (grouped)
+            doc = db[AutoRedeemMembersAdapter.COLL].find_one({
+                'guild_id': int(guild_id),
+                'members.fid': str(fid)
             })
             return doc is not None
         except Exception as e:
