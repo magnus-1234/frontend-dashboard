@@ -3145,41 +3145,41 @@ class ManageGiftCode(commands.Cog):
                 _mongo_enabled = globals().get('mongo_enabled', lambda: False)
                 if _mongo_enabled() and GiftCodesAdapter:
                     try:
-                        mongo_codes = GiftCodesAdapter.get_all()
+                        # Use get_all_with_status to get processed flag accurately
+                        mongo_codes = GiftCodesAdapter.get_all_with_status()
                         if mongo_codes:
                             all_codes = []
                             for code_data in mongo_codes:
                                 try:
-                                    if isinstance(code_data, tuple):
-                                        code_str = str(code_data[0]) if code_data else ''
-                                        date_str = str(code_data[1]) if len(code_data) > 1 else ''
-                                        processed = code_data[2] if len(code_data) > 2 else False
-                                    elif isinstance(code_data, dict):
-                                        code_str = str(code_data.get('giftcode', ''))
-                                        date_str = str(code_data.get('date', ''))
-                                        processed = code_data.get('auto_redeem_processed', False)
-                                    else:
-                                        code_str = str(code_data)
-                                        date_str = ''
-                                        processed = False
+                                    code_str = str(code_data.get('giftcode', ''))
+                                    date_str = str(code_data.get('date', ''))
+                                    processed = code_data.get('auto_redeem_processed', False)
+                                    status = code_data.get('validation_status', 'pending')
                                     
-                                    if code_str:
+                                    # ONLY show active codes (validated or pending)
+                                    if code_str and status in ('validated', 'pending'):
                                         all_codes.append((code_str, date_str, processed))
                                 except Exception:
                                     continue
                     except Exception as e:
                         self.logger.warning(f"Failed to fetch codes from MongoDB for trigger menu: {e}")
                 
-                # Fallback to SQLite
+                # Fallback to SQLite (or additional results)
                 if not all_codes:
                     try:
-                        self.cursor.execute("SELECT giftcode, date, auto_redeem_processed FROM gift_codes ORDER BY added_at DESC")
+                        # Fetch ONLY validated or pending codes
+                        self.cursor.execute("""
+                            SELECT giftcode, date, auto_redeem_processed 
+                            FROM gift_codes 
+                            WHERE validation_status IN ('validated', 'pending')
+                            ORDER BY added_at DESC
+                        """)
                         all_codes = self.cursor.fetchall()
                     except Exception as e:
                         self.logger.error(f"SQLite fetch failed for trigger menu: {e}")
                 
                 if not all_codes:
-                    await interaction.followup.send("📋 No gift codes found in the database.", ephemeral=True)
+                    await interaction.followup.send("📋 No active gift codes found in the database. (Only 'validated' or 'pending' codes are shown)", ephemeral=True)
                     return
                 
                 recent_codes = all_codes[:25]
