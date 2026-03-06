@@ -2678,7 +2678,7 @@ class ManageGiftCode(commands.Cog):
             
             # trigger the background logic!
             try:
-                await self.trigger_auto_redeem_for_new_codes([code], is_recheck=True)
+                await self.trigger_auto_redeem_for_new_codes([(code, "Manual Trigger")], is_recheck=True)
             except Exception as e:
                 self.logger.exception(f"Error during manual trigger of code {code}: {e}")
             return
