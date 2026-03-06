@@ -219,6 +219,9 @@ class ManageGiftCode(commands.Cog):
         
         # Trigger startup check for existing codes
         asyncio.create_task(self.process_existing_codes_on_startup())
+        
+        # Sync MongoDB members/settings to SQLite so they survive restarts
+        asyncio.create_task(self._sync_mongo_to_sqlite_on_startup())
 
     async def cog_unload(self):
         """Called when the cog is unloaded. Performs cleanup."""
@@ -275,6 +278,88 @@ class ManageGiftCode(commands.Cog):
     async def before_auto_redeem_worker(self):
         await self.bot.wait_until_ready()
         self.logger.info("👷 Auto-redeem queue worker started")
+
+    async def _safe_edit_message(self, interaction: discord.Interaction, **kwargs):
+        """Safely edit an interaction message, falling back to followup if already acknowledged."""
+        try:
+            await self._safe_edit_message(interaction, **kwargs)
+        except discord.errors.HTTPException as e:
+            if e.code == 40060:  # Interaction already acknowledged
+                try:
+                    await interaction.followup.send(ephemeral=True, **kwargs)
+                except Exception as fe:
+                    self.logger.warning(f"Followup also failed after 40060: {fe}")
+            else:
+                raise
+
+    async def _sync_mongo_to_sqlite_on_startup(self):
+        """At startup, pull ALL member/settings data from MongoDB into SQLite for robustness."""
+        await self.bot.wait_until_ready()
+        if not (mongo_enabled() and AutoRedeemMembersAdapter and AutoRedeemSettingsAdapter):
+            return
+        
+        try:
+            self.logger.info("🔄 [STARTUP] Syncing MongoDB auto-redeem data to SQLite...")
+            
+            # --- Members ---
+            synced_members = 0
+            try:
+                db = _get_db()
+                all_member_docs = list(db['auto_redeem_members'].find(
+                    {'fid': {'$nin': [None, '', 'None']}}
+                ))
+                for doc in all_member_docs:
+                    try:
+                        guild_id = int(doc.get('guild_id', 0))
+                        fid = str(doc.get('fid', '')).strip()
+                        if not guild_id or not fid:
+                            continue
+                        nickname = doc.get('nickname', 'Unknown')
+                        furnace_lv = int(doc.get('furnace_lv', 0))
+                        avatar_image = doc.get('avatar_image', '')
+                        added_by = doc.get('added_by')
+                        added_at = str(doc.get('added_at', ''))
+                        self.cursor.execute("""
+                            INSERT OR REPLACE INTO auto_redeem_members
+                            (guild_id, fid, nickname, furnace_lv, avatar_image, added_by, added_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """, (guild_id, fid, nickname, furnace_lv, avatar_image, added_by, added_at))
+                        synced_members += 1
+                    except Exception as me:
+                        self.logger.warning(f"Failed to sync member doc to SQLite: {me}")
+                self.giftcode_db.commit()
+                self.logger.info(f"✅ [STARTUP] Synced {synced_members} member records from MongoDB to SQLite")
+            except Exception as e:
+                self.logger.error(f"❌ [STARTUP] Member sync failed: {e}")
+
+            # --- Settings ---
+            synced_settings = 0
+            try:
+                all_settings = AutoRedeemSettingsAdapter.get_all_settings()
+                for s in (all_settings or []):
+                    try:
+                        guild_id = int(s.get('guild_id', 0))
+                        enabled = 1 if s.get('enabled', False) else 0
+                        updated_by = s.get('updated_by')
+                        updated_at = str(s.get('updated_at', ''))
+                        if not guild_id:
+                            continue
+                        self.cursor.execute("""
+                            INSERT OR REPLACE INTO auto_redeem_settings
+                            (guild_id, enabled, updated_by, updated_at)
+                            VALUES (?, ?, ?, ?)
+                        """, (guild_id, enabled, updated_by, updated_at))
+                        synced_settings += 1
+                    except Exception as se:
+                        self.logger.warning(f"Failed to sync settings for guild {s.get('guild_id')}: {se}")
+                self.giftcode_db.commit()
+                self.logger.info(f"✅ [STARTUP] Synced {synced_settings} guild settings from MongoDB to SQLite")
+            except Exception as e:
+                self.logger.error(f"❌ [STARTUP] Settings sync failed: {e}")
+
+        except Exception as e:
+            self.logger.error(f"❌ [STARTUP] MongoDB→SQLite sync failed: {e}")
+
 
     @commands.command(name="test_auto_redeem")
     async def test_auto_redeem(self, ctx, code: str, fid: str = None):
@@ -2326,6 +2411,15 @@ class ManageGiftCode(commands.Cog):
                 self.logger.error("   1. Go to Auto-Redeem Configuration menu")
                 self.logger.error("   2. Click 'Enable Auto-Redeem' button")
                 self.logger.error("   3. Ensure you have members added to auto-redeem list")
+                
+                # Check for existing settings even if disabled for diagnosis
+                try:
+                    self.cursor.execute("SELECT COUNT(*) FROM auto_redeem_settings")
+                    count = self.cursor.fetchone()[0]
+                    self.logger.info(f"📊 SQLite check: Found {count} total rows in auto_redeem_settings")
+                except Exception as e:
+                    self.logger.error(f"❌ Failed to check total SQLite rows: {e}")
+                    
                 self.logger.error("🏁 === TRIGGER AUTO-REDEEM COMPLETE (NO GUILDS) ===")
                 return
             
@@ -2490,7 +2584,7 @@ class ManageGiftCode(commands.Cog):
             view.add_item(discord.ui.Button(label="Refresh Status", emoji="🔄", style=discord.ButtonStyle.secondary, custom_id=f"auto_redeem_manual_status_{code}"))
             
             try:
-                await interaction.response.edit_message(embed=embed, view=view)
+                await self._safe_edit_message(interaction, embed=embed, view=view)
             except discord.errors.HTTPException as e:
                 if e.code == 40060: # Already acknowledged
                     await interaction.followup.edit_message(message_id=interaction.message.id, embed=embed, view=view)
@@ -2609,7 +2703,7 @@ class ManageGiftCode(commands.Cog):
                 row=2
             ))
             
-            await interaction.response.edit_message(embed=embed, view=view)
+            await self._safe_edit_message(interaction, embed=embed, view=view)
             return
         
         # Handle view codes button
@@ -3154,7 +3248,7 @@ class ManageGiftCode(commands.Cog):
                 row=2
             ))
             
-            await interaction.response.edit_message(embed=embed, view=view)
+            await self._safe_edit_message(interaction, embed=embed, view=view)
             return
 
         # Handle manual trigger menu
@@ -3369,7 +3463,7 @@ class ManageGiftCode(commands.Cog):
                 row=1
             ))
             
-            await interaction.response.edit_message(embed=embed, view=view)
+            await self._safe_edit_message(interaction, embed=embed, view=view)
             return
         
         # Handle add via FID button - show modal with WOS API integration
@@ -3559,7 +3653,7 @@ class ManageGiftCode(commands.Cog):
                 row=1
             ))
             
-            await interaction.response.edit_message(embed=embed, view=view)
+            await self._safe_edit_message(interaction, embed=embed, view=view)
             return
         
         # Handle remove via FID button
@@ -3955,7 +4049,7 @@ class ManageGiftCode(commands.Cog):
                 row=2
             ))
             
-            await interaction.response.edit_message(embed=embed, view=view)
+            await self._safe_edit_message(interaction, embed=embed, view=view)
             return
 
 
@@ -5136,7 +5230,7 @@ class ManageGiftCode(commands.Cog):
             )
             embed.set_footer(text=f"Enabled by {interaction.user.name}")
             
-            await interaction.response.edit_message(embed=embed, view=None)
+            await self._safe_edit_message(interaction, embed=embed, view=None)
             return
         
         # Handle disable auto redeem
@@ -5206,7 +5300,7 @@ class ManageGiftCode(commands.Cog):
             )
             embed.set_footer(text=f"Disabled by {interaction.user.name}")
             
-            await interaction.response.edit_message(embed=embed, view=None)
+            await self._safe_edit_message(interaction, embed=embed, view=None)
             return
         
         # Handle reset code status
@@ -5909,3 +6003,4 @@ class ManageGiftCode(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(ManageGiftCode(bot))
+
