@@ -231,8 +231,10 @@ class ManageGiftCode(commands.Cog):
         
         # Close database connections
         try:
-            self.giftcode_db.close()
-            self.settings_db.close()
+            if hasattr(self, 'giftcode_db') and self.giftcode_db:
+                self.giftcode_db.close()
+            if hasattr(self, 'settings_db') and self.settings_db:
+                self.settings_db.close()
             self.logger.info("ManageGiftCode: Database connections closed.")
         except Exception as e:
             self.logger.error(f"Error closing databases in cog_unload: {e}")
@@ -2017,7 +2019,7 @@ class ManageGiftCode(commands.Cog):
                     # Update status of existing code if needed (e.g., if it was processed in Mongo but not SQLite)
                     self.cursor.execute(
                         "UPDATE gift_codes SET auto_redeem_processed = ? WHERE giftcode = ? AND auto_redeem_processed != ?",
-                        (processed_int, code, processed_int)
+                        (processed_int, str(code), processed_int)
                     )
                     if self.cursor.rowcount > 0:
                         synced_count += 1
@@ -2027,7 +2029,7 @@ class ManageGiftCode(commands.Cog):
                         added_at = code_data.get('created_at') or datetime.now()
                         self.cursor.execute(
                             "INSERT INTO gift_codes (giftcode, date, validation_status, added_at, auto_redeem_processed) VALUES (?, ?, ?, ?, ?)",
-                            (code, date, validation_status, added_at, processed_int)
+                            (str(code), str(date), str(validation_status), str(added_at), processed_int)
                         )
                         new_count += 1
                     except Exception as e:
