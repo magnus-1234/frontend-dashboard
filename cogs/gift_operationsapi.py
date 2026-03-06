@@ -207,9 +207,12 @@ class GiftCodeAPI:
     def __del__(self):
         """Clean up database connections."""
         try:
-            self.conn.close()
-            self.settings_conn.close()
-            self.users_conn.close()
+            if hasattr(self, 'conn') and self.conn:
+                self.conn.close()
+            if hasattr(self, 'settings_conn') and self.settings_conn:
+                self.settings_conn.close()
+            if hasattr(self, 'users_conn') and self.users_conn:
+                self.users_conn.close()
         except:
             pass
     
@@ -477,13 +480,17 @@ class GiftCodeAPI:
                                         # Some DB entries may store ISO timestamps like 'YYYY-MM-DDTHH:MM:SS.ssssss'.
                                         # Normalize to date-only before parsing to avoid ValueError.
                                         # Also ensure db_code is a plain string (MongoDB ObjectId-safe).
+                                        # Handle missing or invalid dates by defaulting to current date
                                         db_code_str = str(db_code)
-                                        date_str_clean = str(db_date)[:10] if db_date is not None else datetime.now().strftime("%Y-%m-%d")
-                                        try:
-                                            date_obj = datetime.strptime(date_str_clean, "%Y-%m-%d")
-                                            formatted_date = date_obj.strftime("%d.%m.%Y")
-                                        except (ValueError, TypeError):
+                                        if db_date is None or str(db_date).lower() == 'none':
                                             formatted_date = datetime.now().strftime("%d.%m.%Y")
+                                        else:
+                                            date_str_clean = str(db_date)[:10]
+                                            try:
+                                                date_obj = datetime.strptime(date_str_clean, "%Y-%m-%d")
+                                                formatted_date = date_obj.strftime("%d.%m.%Y")
+                                            except (ValueError, TypeError):
+                                                formatted_date = datetime.now().strftime("%d.%m.%Y")
                                         
                                         data = {
                                             'code': db_code_str,

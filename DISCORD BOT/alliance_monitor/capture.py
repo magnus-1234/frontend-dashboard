@@ -135,7 +135,7 @@ class ScreenCapture:
     
     def __del__(self):
         """Cleanup on deletion"""
-        if hasattr(self, 'sct'):
+        if hasattr(self, 'sct') and self.sct:
             self.sct.close()
 
 
