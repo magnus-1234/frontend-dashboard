@@ -3326,45 +3326,87 @@ class ManageGiftCode(commands.Cog):
                 # Fetch all gift codes from database
                 all_codes = []
                 
-                # Try MongoDB first
-                _mongo_enabled = globals().get('mongo_enabled', lambda: False)
-                if _mongo_enabled() and GiftCodesAdapter:
-                    try:
-                        # Use get_all_with_status to get processed flag accurately
-                        mongo_codes = GiftCodesAdapter.get_all_with_status()
-                        if mongo_codes:
-                            all_codes = []
-                            for code_data in mongo_codes:
-                                try:
-                                    code_str = str(code_data.get('giftcode', ''))
-                                    date_str = str(code_data.get('date', ''))
-                                    processed = code_data.get('auto_redeem_processed', False)
-                                    status = code_data.get('validation_status', 'pending')
-                                    
-                                    # ONLY show active codes (validated or pending)
-                                    if code_str and status in ('validated', 'pending'):
-                                        all_codes.append((code_str, date_str, processed))
-                                except Exception:
-                                    continue
-                    except Exception as e:
-                        self.logger.warning(f"Failed to fetch codes from MongoDB for trigger menu: {e}")
+                # Fetch active codes using the same logic as /giftcode
+                active_codes_map = {}
                 
-                # Fallback to SQLite (or additional results)
-                if not all_codes:
-                    try:
-                        # Fetch ONLY validated or pending codes
-                        self.cursor.execute("""
-                            SELECT giftcode, date, auto_redeem_processed 
-                            FROM gift_codes 
-                            WHERE validation_status IN ('validated', 'pending')
-                            ORDER BY added_at DESC
-                        """)
-                        all_codes = self.cursor.fetchall()
-                    except Exception as e:
-                        self.logger.error(f"SQLite fetch failed for trigger menu: {e}")
+                # 1. Fetch from website
+                try:
+                    from gift_codes import get_active_gift_codes
+                    website_codes = await get_active_gift_codes()
+                    if website_codes:
+                        for item in website_codes:
+                            if item.get('code') and item.get('is_active', True):
+                                active_codes_map[item['code']] = item.get('expiry', 'Unknown')
+                except Exception as e:
+                    self.logger.error(f"Error fetching website codes for trigger menu: {e}")
+                
+                # 2. Fetch from API
+                try:
+                    api_codes = await self.fetch_codes_from_api()
+                    if api_codes:
+                        for code_str, date_str in api_codes:
+                            if code_str not in active_codes_map:
+                                active_codes_map[code_str] = date_str
+                except Exception as e:
+                    self.logger.error(f"Error fetching API codes for trigger menu: {e}")
+                
+                # Filter by expiry date
+                valid_active_codes = []
+                now = datetime.now()
+                import dateutil.parser
+                
+                for code_str, expiry_str in active_codes_map.items():
+                    is_active = True
+                    if expiry_str and expiry_str != 'Unknown':
+                        try:
+                            expiry_date = dateutil.parser.parse(expiry_str, fuzzy=True)
+                            if expiry_date <= now:
+                                is_active = False
+                        except Exception:
+                            pass
+                    
+                    if is_active:
+                        valid_active_codes.append(code_str)
+                
+                all_codes = []
+                if valid_active_codes:
+                    # Get processed status from database
+                    _mongo_enabled = globals().get('mongo_enabled', lambda: False)
+                    db_status_map = {}
+                    
+                    if _mongo_enabled() and GiftCodesAdapter:
+                        try:
+                            mongo_codes = GiftCodesAdapter.get_all_with_status()
+                            if mongo_codes:
+                                for code_data in mongo_codes:
+                                    c = str(code_data.get('giftcode', ''))
+                                    proc = code_data.get('auto_redeem_processed', False)
+                                    date_added = code_data.get('date', '')
+                                    db_status_map[c] = (proc, date_added)
+                        except Exception as e:
+                            self.logger.warning(f"Failed to fetch from Mongo for trigger menu: {e}")
+                    
+                    if not db_status_map:
+                        try:
+                            self.cursor.execute("SELECT giftcode, auto_redeem_processed, date FROM gift_codes")
+                            for row in self.cursor.fetchall():
+                                db_status_map[row[0]] = (bool(row[1]), str(row[2]))
+                        except Exception as e:
+                            self.logger.error(f"SQLite fetch failed for trigger menu: {e}")
+                    
+                    # Build final list
+                    for code_str in valid_active_codes:
+                        processed = False
+                        date_str = active_codes_map[code_str]
+                        if code_str in db_status_map:
+                            processed, db_date = db_status_map[code_str]
+                            if db_date and db_date.strip() and date_str == 'Unknown':
+                                date_str = db_date
+                        
+                        all_codes.append((code_str, date_str, processed))
                 
                 if not all_codes:
-                    await interaction.followup.send("📋 No active gift codes found in the database. (Only 'validated' or 'pending' codes are shown)", ephemeral=True)
+                    await interaction.followup.send("📋 No active gift codes found at the moment.", ephemeral=True)
                     return
                 
                 recent_codes = all_codes[:25]
