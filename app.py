@@ -992,6 +992,14 @@ async def setup_hook():
     except Exception as e:
         logger.error(f"❌ Failed to start keep-alive task: {e}")
 
+    # Start giftcode auto-poster background loop (Checks every 5 minutes)
+    try:
+        import giftcode_poster
+        asyncio.create_task(giftcode_poster.start_poster(bot, interval=300))
+        logger.info("✅ Giftcode auto-poster background task started (5m interval)")
+    except Exception as e:
+        logger.error(f"❌ Failed to start giftcode auto-poster task: {e}")
+
     # Restore persistent views from MongoDB
     async def restore_persistent_views():
         """Restore all persistent views from MongoDB on bot startup"""

@@ -1,0 +1,105 @@
+[TAILING] Tailing last 50 lines for [discordbot] process (change the value with --lines option)
+/home/opc/.pm2/logs/discordbot-error.log last 50 lines:
+1|discordb |     from cogs.reminder_system import ReminderSystem, set_user_timezone, get_user_timezone, TimeParser, REMINDER_IMAGES
+1|discordb | ModuleNotFoundError: No module named 'cogs.reminder_system'
+1|discordb | Traceback (most recent call last):
+1|discordb |   File "/home/opc/app/bot/app.py", line 159, in <module>
+1|discordb |     from cogs.reminder_system import ReminderSystem, set_user_timezone, get_user_timezone, TimeParser, REMINDER_IMAGES
+1|discordb | ModuleNotFoundError: No module named 'cogs.reminder_system'
+1|discordb | Traceback (most recent call last):
+1|discordb |   File "/home/opc/app/bot/app.py", line 159, in <module>
+1|discordb |     from cogs.reminder_system import ReminderSystem, set_user_timezone, get_user_timezone, TimeParser, REMINDER_IMAGES
+1|discordb | ModuleNotFoundError: No module named 'cogs.reminder_system'
+1|discordb | Traceback (most recent call last):
+1|discordb |   File "/home/opc/app/bot/app.py", line 159, in <module>
+1|discordb |     from cogs.reminder_system import ReminderSystem, set_user_timezone, get_user_timezone, TimeParser, REMINDER_IMAGES
+1|discordb | ModuleNotFoundError: No module named 'cogs.reminder_system'
+1|discordb | Traceback (most recent call last):
+1|discordb |   File "/home/opc/app/bot/app.py", line 159, in <module>
+1|discordb |     from cogs.reminder_system import ReminderSystem, set_user_timezone, get_user_timezone, TimeParser, REMINDER_IMAGES
+1|discordb | ModuleNotFoundError: No module named 'cogs.reminder_system'
+1|discordb | Traceback (most recent call last):
+1|discordb |   File "/home/opc/app/bot/app.py", line 159, in <module>
+1|discordb |     from cogs.reminder_system import ReminderSystem, set_user_timezone, get_user_timezone, TimeParser, REMINDER_IMAGES
+1|discordb | ModuleNotFoundError: No module named 'cogs.reminder_system'
+1|discordb | Traceback (most recent call last):
+1|discordb |   File "/home/opc/app/bot/app.py", line 159, in <module>
+1|discordb |     from cogs.reminder_system import ReminderSystem, set_user_timezone, get_user_timezone, TimeParser, REMINDER_IMAGES
+1|discordb | ModuleNotFoundError: No module named 'cogs.reminder_system'
+1|discordb | Traceback (most recent call last):
+1|discordb |   File "/home/opc/app/bot/app.py", line 159, in <module>
+1|discordb |     from cogs.reminder_system import ReminderSystem, set_user_timezone, get_user_timezone, TimeParser, REMINDER_IMAGES
+1|discordb | ModuleNotFoundError: No module named 'cogs.reminder_system'
+1|discordb | Traceback (most recent call last):
+1|discordb |   File "/home/opc/app/bot/app.py", line 159, in <module>
+1|discordb |     from cogs.reminder_system import ReminderSystem, set_user_timezone, get_user_timezone, TimeParser, REMINDER_IMAGES
+1|discordb | ModuleNotFoundError: No module named 'cogs.reminder_system'
+1|discordb | Traceback (most recent call last):
+1|discordb |   File "/home/opc/app/bot/app.py", line 159, in <module>
+1|discordb |     from cogs.reminder_system import ReminderSystem, set_user_timezone, get_user_timezone, TimeParser, REMINDER_IMAGES
+1|discordb | ModuleNotFoundError: No module named 'cogs.reminder_system'
+1|discordb | Traceback (most recent call last):
+1|discordb |   File "/home/opc/app/bot/app.py", line 159, in <module>
+1|discordb |     from cogs.reminder_system import ReminderSystem, set_user_timezone, get_user_timezone, TimeParser, REMINDER_IMAGES
+1|discordb | ModuleNotFoundError: No module named 'cogs.reminder_system'
+1|discordb | Traceback (most recent call last):
+1|discordb |   File "/home/opc/app/bot/app.py", line 159, in <module>
+1|discordb |     from cogs.reminder_system import ReminderSystem, set_user_timezone, get_user_timezone, TimeParser, REMINDER_IMAGES
+1|discordb | ModuleNotFoundError: No module named 'cogs.reminder_system'
+1|discordb | /home/opc/app/bot/app.py:445: RuntimeWarning: coroutine 'BotBase.close' was never awaited
+1|discordb |   b.close()
+1|discordb | RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+1|discordb | ERROR: Operation cancelled by user
+
+/home/opc/.pm2/logs/discordbot-out.log last 50 lines:
+1|discordb |  |  \/  |   /\   / ____| \ | | |  | |/ ____|
+1|discordb |  | \  / |  /  \ | |  __|  \| | |  | | (___  
+1|discordb |  | |\/| | / /\ \| | |_ | . ` | |  | |\___ \ 
+1|discordb |  | |  | |/ ____ \ |__| | |\  | |__| |____) |
+1|discordb |  |_|  |_/_/    \_\_____|_| \_|\____/|_____/ 
+1|discordb | 
+1|discordb | ✨ MAGNUS — Clean Console • started at 2026-03-10 11:54:32
+1|discordb | 
+1|discordb | 
+1|discordb | Checking dependencies...
+1|discordb | Installing 5 missing packages...
+1|discordb | Collecting opencv-python>=4.8.0
+1|discordb |   Downloading opencv_python-4.13.0.92-cp37-abi3-manylinux_2_28_x86_64.whl.metadata (19 kB)
+1|discordb | Requirement already satisfied: numpy>=2 in ./bot_venv/lib64/python3.11/site-packages (from opencv-python>=4.8.0) (2.4.2)
+1|discordb | Downloading opencv_python-4.13.0.92-cp37-abi3-manylinux_2_28_x86_64.whl (72.9 MB)
+1|discordb |    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 72.9/72.9 MB 6.4 MB/s  0:00:11
+1|discordb | Installing collected packages: opencv-python
+1|discordb | Successfully installed opencv-python-4.13.0.92
+1|discordb | ✅ Installed opencv-python>=4.8.0
+1|discordb | Collecting pytesseract>=0.3.10
+1|discordb |   Downloading pytesseract-0.3.13-py3-none-any.whl.metadata (11 kB)
+1|discordb | Requirement already satisfied: packaging>=21.3 in ./bot_venv/lib64/python3.11/site-packages (from pytesseract>=0.3.10) (26.0)
+1|discordb | Requirement already satisfied: Pillow>=8.0.0 in ./bot_venv/lib64/python3.11/site-packages (from pytesseract>=0.3.10) (12.1.1)
+1|discordb | Downloading pytesseract-0.3.13-py3-none-any.whl (14 kB)
+1|discordb | Installing collected packages: pytesseract
+1|discordb | Successfully installed pytesseract-0.3.13
+1|discordb | ✅ Installed pytesseract>=0.3.10
+1|discordb | Collecting paddlepaddle>=2.6.0
+1|discordb |   Downloading paddlepaddle-3.3.0-cp311-cp311-manylinux1_x86_64.whl.metadata (8.8 kB)
+1|discordb | Collecting httpx (from paddlepaddle>=2.6.0)
+1|discordb |   Downloading httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+1|discordb | Requirement already satisfied: numpy>=1.21 in ./bot_venv/lib64/python3.11/site-packages (from paddlepaddle>=2.6.0) (2.4.2)
+1|discordb | Requirement already satisfied: protobuf>=3.20.2 in ./bot_venv/lib64/python3.11/site-packages (from paddlepaddle>=2.6.0) (6.33.5)
+1|discordb | Requirement already satisfied: Pillow in ./bot_venv/lib64/python3.11/site-packages (from paddlepaddle>=2.6.0) (12.1.1)
+1|discordb | Collecting opt_einsum==3.3.0 (from paddlepaddle>=2.6.0)
+1|discordb |   Downloading opt_einsum-3.3.0-py3-none-any.whl.metadata (6.5 kB)
+1|discordb | Collecting networkx (from paddlepaddle>=2.6.0)
+1|discordb |   Downloading networkx-3.6.1-py3-none-any.whl.metadata (6.8 kB)
+1|discordb | Requirement already satisfied: typing_extensions in ./bot_venv/lib64/python3.11/site-packages (from paddlepaddle>=2.6.0) (4.15.0)
+1|discordb | Collecting safetensors>=0.6.0 (from paddlepaddle>=2.6.0)
+1|discordb |   Downloading safetensors-0.7.0-cp38-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.1 kB)
+1|discordb | Collecting anyio (from httpx->paddlepaddle>=2.6.0)
+1|discordb |   Downloading anyio-4.12.1-py3-none-any.whl.metadata (4.3 kB)
+1|discordb | Requirement already satisfied: certifi in ./bot_venv/lib64/python3.11/site-packages (from httpx->paddlepaddle>=2.6.0) (2026.2.25)
+1|discordb | Collecting httpcore==1.* (from httpx->paddlepaddle>=2.6.0)
+1|discordb |   Downloading httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+1|discordb | Requirement already satisfied: idna in ./bot_venv/lib64/python3.11/site-packages (from httpx->paddlepaddle>=2.6.0) (3.11)
+1|discordb | Collecting h11>=0.16 (from httpcore==1.*->httpx->paddlepaddle>=2.6.0)
+1|discordb |   Downloading h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+1|discordb | Downloading paddlepaddle-3.3.0-cp311-cp311-manylinux1_x86_64.whl (193.7 MB)
+

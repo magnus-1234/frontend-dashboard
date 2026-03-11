@@ -171,6 +171,20 @@ except Exception as primary_exc:
         @staticmethod
         def is_redeemed(guild_id: int, code: str, fid: str):
             return False
+        @staticmethod
+        def is_code_sent(guild_id: int, code: str):
+            return False
+
+    class SentGiftCodesAdapter(_FallbackAdapter):
+        @staticmethod
+        def get_sent_codes(guild_id: int):
+            return set()
+        @staticmethod
+        def mark_codes_sent(guild_id: int, codes: list, source: str = 'auto'):
+            return False
+        @staticmethod
+        def is_code_sent(guild_id: int, code: str):
+            return False
 
     def _get_db():
         return None

@@ -13,6 +13,7 @@ import io
 from datetime import datetime
 import time
 import logging
+import giftcode_poster
 
 try:
     from db.mongo_adapters import mongo_enabled, GiftCodesAdapter, AutoRedeemSettingsAdapter, AutoRedeemChannelsAdapter, GiftCodeRedemptionAdapter, AutoRedeemMembersAdapter, AutoRedeemedCodesAdapter, _get_db
@@ -1839,6 +1840,54 @@ class ManageGiftCode(commands.Cog):
             self.logger.exception(f"Error fetching codes from API: {e}")
             return []
     
+    async def get_active_gift_codes_consolidated(self):
+        """
+        Fetch and filter active gift codes from both website and API sources.
+        Returns a dictionary mapping gift code strings to their expiry dates.
+        """
+        active_codes_map = {}
+        
+        # 1. Fetch from website scraper
+        try:
+            from gift_codes import get_active_gift_codes
+            website_codes = await get_active_gift_codes()
+            if website_codes:
+                for item in website_codes:
+                    if item.get('code') and item.get('is_active', True):
+                        active_codes_map[item['code']] = item.get('expiry', 'Unknown')
+        except Exception as e:
+            self.logger.error(f"Error fetching website codes for consolidated list: {e}")
+            
+        # 2. Fetch from API
+        try:
+            api_codes = await self.fetch_codes_from_api()
+            if api_codes:
+                for code_str, date_str in api_codes:
+                    if code_str not in active_codes_map:
+                        active_codes_map[code_str] = date_str
+        except Exception as e:
+            self.logger.error(f"Error fetching API codes for consolidated list: {e}")
+            
+        # 3. Filter by expiry date
+        filtered_map = {}
+        now = datetime.now()
+        import dateutil.parser
+        
+        for code_str, expiry_str in active_codes_map.items():
+            is_active = True
+            if expiry_str and expiry_str != 'Unknown':
+                try:
+                    expiry_date = dateutil.parser.parse(expiry_str, fuzzy=True)
+                    if expiry_date <= now:
+                        is_active = False
+                except Exception:
+                    pass
+            
+            if is_active:
+                filtered_map[code_str] = expiry_str
+                
+        return filtered_map
+
     async def check_giftcode_in_api(self, giftcode: str) -> bool:
         """Check if a gift code exists in the API"""
         try:
@@ -2438,6 +2487,13 @@ class ManageGiftCode(commands.Cog):
             
             # Trigger auto-redeem for all guilds that have it enabled
             await self.trigger_auto_redeem_for_new_codes(new_codes)
+
+            # Trigger immediate auto-posting to configured channels
+            try:
+                await giftcode_poster.run_now_and_report(self.bot)
+                self.logger.info("🚀 Triggered immediate gift code auto-posting")
+            except Exception as e:
+                self.logger.error(f"Error triggering immediate auto-posting: {e}")
         
         except Exception as e:
             self.logger.exception(f"Error notifying admins: {e}")
@@ -3358,50 +3414,9 @@ class ManageGiftCode(commands.Cog):
             await interaction.response.defer(ephemeral=True)
             
             try:
-                # Fetch all gift codes from database
-                all_codes = []
-                
-                # Fetch active codes using the same logic as /giftcode
-                active_codes_map = {}
-                
-                # 1. Fetch from website
-                try:
-                    from gift_codes import get_active_gift_codes
-                    website_codes = await get_active_gift_codes()
-                    if website_codes:
-                        for item in website_codes:
-                            if item.get('code') and item.get('is_active', True):
-                                active_codes_map[item['code']] = item.get('expiry', 'Unknown')
-                except Exception as e:
-                    self.logger.error(f"Error fetching website codes for trigger menu: {e}")
-                
-                # 2. Fetch from API
-                try:
-                    api_codes = await self.fetch_codes_from_api()
-                    if api_codes:
-                        for code_str, date_str in api_codes:
-                            if code_str not in active_codes_map:
-                                active_codes_map[code_str] = date_str
-                except Exception as e:
-                    self.logger.error(f"Error fetching API codes for trigger menu: {e}")
-                
-                # Filter by expiry date
-                valid_active_codes = []
-                now = datetime.now()
-                import dateutil.parser
-                
-                for code_str, expiry_str in active_codes_map.items():
-                    is_active = True
-                    if expiry_str and expiry_str != 'Unknown':
-                        try:
-                            expiry_date = dateutil.parser.parse(expiry_str, fuzzy=True)
-                            if expiry_date <= now:
-                                is_active = False
-                        except Exception:
-                            pass
-                    
-                    if is_active:
-                        valid_active_codes.append(code_str)
+                # Fetch active codes using the unified logic
+                active_codes_map = await self.get_active_gift_codes_consolidated()
+                valid_active_codes = list(active_codes_map.keys())
                 
                 all_codes = []
                 if valid_active_codes:
@@ -6014,9 +6029,9 @@ class ManageGiftCode(commands.Cog):
                         # Start immediate redemption process for active codes
                         async def process_initial_redemptions():
                             try:
-                                # Get all valid/active gift codes from DB
-                                self.cursor.execute("SELECT giftcode FROM gift_codes WHERE validation_status = 'validated' OR validation_status = 'pending'")
-                                active_codes = [r[0] for r in self.cursor.fetchall()]
+                                # Get all valid/active gift codes from unified source
+                                active_codes_map = await self.get_active_gift_codes_consolidated()
+                                active_codes = list(active_codes_map.keys())
                                 
                                 if not active_codes:
                                     embed.set_field_at(2, name="🚀 Auto-Processing", value="`No active codes found to redeem.`", inline=False)
