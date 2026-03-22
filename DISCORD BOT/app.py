@@ -555,7 +555,11 @@ async def fetch_pollinations_image(prompt_text: str, width: int = None, height: 
         url = url + "?" + "&".join(params)
 
     timeout = aiohttp.ClientTimeout(total=120)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "image/jpeg, image/png, image/*"
+    }
+    async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
         async with session.get(url, allow_redirects=True) as resp:
             if resp.status == 200:
                 content_type = resp.headers.get("Content-Type", "") or resp.headers.get("content-type", "")
