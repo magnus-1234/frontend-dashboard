@@ -537,45 +537,15 @@ def append_feedback_log(user, user_id, feedback_text, posted_channel=False, post
 
 
 async def fetch_pollinations_image(prompt_text: str, width: int = None, height: int = None, model_name: str = None, seed: int = None) -> bytes:
-    """Module-level helper to fetch images from Pollinations public endpoint."""
-    base = "https://image.pollinations.ai/prompt/"
-    encoded = quote(prompt_text, safe='')
-    url = base + encoded
-    params = []
-    if width:
-        params.append(f"width={int(width)}")
-    if height:
-        params.append(f"height={int(height)}")
-    # Model parameter currently crashes Pollinations with 500 error, omit it
-    # if model_name:
-    #     params.append(f"model={quote(model_name, safe='')}")
-    if seed is not None:
-        params.append(f"seed={int(seed)}")
-    if params:
-        url = url + "?" + "&".join(params)
-
-    timeout = aiohttp.ClientTimeout(total=120)
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "Accept": "image/jpeg, image/png, image/*"
-    }
-    async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-        async with session.get(url, allow_redirects=True) as resp:
-            if resp.status == 200:
-                content_type = resp.headers.get("Content-Type", "") or resp.headers.get("content-type", "")
-                if content_type and content_type.startswith("image/"):
-                    return await resp.read()
-                data = await resp.read()
-                if data:
-                    return data
-                raise Exception(f"Empty response from Pollinations (status 200) for URL: {url}")
-            elif resp.status == 429:
-                raise Exception("Rate limited by Pollinations API")
-            elif resp.status >= 500:
-                raise Exception(f"Pollinations server error: {resp.status}")
-            else:
-                text = await resp.text()
-                raise Exception(f"Pollinations request failed: {resp.status} - {text}")
+    """Module-level helper to fetch images using api_manager (bypassing broken Pollinations API)."""
+    # Route through the robust api_manager to use HuggingFace or OpenAI fallback
+    # Seed parameter is ignored as HF/OpenAI don't consistently support it via current wrapper
+    from api_manager import make_image_request
+    try:
+        return await make_image_request(prompt_text, width=width, height=height, model=model_name)
+    except Exception as e:
+        logger.error(f"Image generation fallback failed: {e}")
+        raise
 
 
 def detect_image_request(text: str):
