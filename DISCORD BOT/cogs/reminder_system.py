@@ -1103,9 +1103,13 @@ class ReminderSystem(commands.Cog):
         # Track when the cog was initialized to prevent sending old reminders on restart.
         # Store as naive UTC datetime for consistent comparison with reminder_time values.
         self.startup_time = get_accurate_utc_time()  # Always naive UTC
+        # Track last loop execution time to detect freezes/hiccups
+        self.last_check_time = self.startup_time
+        
         # Maximum age of a reminder we will still send (minutes).
-        # Set to 1 so if the bot stalls/freezes, any reminder that couldn't be sent exactly on time is strictly skipped.
+        # Set to a tight 1 minute so if the bot stalls/freezes, any reminder that couldn't be sent exactly on time is strictly skipped.
         self.max_staleness_minutes = 1
+        
         # Prefer MongoDB-backed storage if MONGO_URI is provided; otherwise fall back to SQLite
         try:
             if os.getenv('MONGO_URI'):
@@ -1139,10 +1143,20 @@ class ReminderSystem(commands.Cog):
             due_reminders = self.storage.get_due_reminders()
             
             now = get_accurate_utc_time()  # naive UTC
+            
+            # Detect loop execution gaps (Freezes)
+            # If the gap since last check is > 90 seconds (on a 60s loop), we just recovered from a freeze.
+            gap_seconds = (now - self.last_check_time).total_seconds()
+            is_recovering_from_freeze = gap_seconds > 90
+            
+            if is_recovering_from_freeze:
+                logger.warning(f"⚠️ Reminder loop recovered from a freeze/hiccup! (Gap: {gap_seconds:.1f}s). Applying stricter staleness checks.")
+
             # Earliest time we will still send a reminder (older ones are considered stale).
-            # This prevents a flood of old reminders after a network hiccup or connectivity drop
-            # where check_reminders failed silently for a while.
-            stale_cutoff = now - timedelta(minutes=self.max_staleness_minutes)
+            # If we just recovered from a freeze, we slightly tighten the window to 30 seconds
+            # to avoid the "flood" effect for anything that became due during the freeze.
+            effective_staleness = 1 if not is_recovering_from_freeze else 0.5
+            stale_cutoff = now - timedelta(minutes=effective_staleness)
 
             def _to_naive_utc(dt: datetime) -> datetime:
                 """Normalize a datetime to naive UTC for safe comparison."""
@@ -1179,6 +1193,16 @@ class ReminderSystem(commands.Cog):
                 logger.info(f"🚫 Silently processing {len(to_skip)} missed/stale reminder(s)")
                 for reminder in to_skip:
                     try:
+                        # Determine skip reason for logging
+                        rt = _to_naive_utc(reminder.get('reminder_time'))
+                        reason = "Unknown"
+                        if rt < startup_naive:
+                            reason = f"Due before bot startup ({rt} < {startup_naive})"
+                        elif rt < stale_cutoff:
+                            reason = f"Stale/Freeze recovery ({rt} < {stale_cutoff})"
+                        
+                        logger.info(f"⏭️ Skipping reminder {reminder.get('id')} - Reason: {reason}")
+                        
                         # Mark as sent so it doesn't show up in due_reminders again
                         self.storage.mark_reminder_sent(reminder['id'])
                         
@@ -1296,6 +1320,9 @@ class ReminderSystem(commands.Cog):
                     
                 except Exception as e:
                     logger.error(f"❌ Failed to send reminder {reminder['id']}: {e}")
+            
+            # Update last check time for the next iteration
+            self.last_check_time = now
         
         except Exception as e:
             logger.error(f"❌ Error in check_reminders task: {e}")
