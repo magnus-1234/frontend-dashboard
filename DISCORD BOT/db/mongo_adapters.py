@@ -3019,6 +3019,56 @@ class RecordsAdapter:
             return None
 
     @staticmethod
+    def get_custom_columns(guild_id: int, record_name: str) -> list:
+        """Get custom column names for a record"""
+        try:
+            record = RecordsAdapter.get_record(guild_id, record_name)
+            if record:
+                return record.get('custom_columns', [])
+            return []
+        except Exception as e:
+            logger.error(f'Failed to get custom columns for {record_name}: {e}')
+            return []
+
+    @staticmethod
+    def add_custom_column(guild_id: int, record_name: str, column_name: str) -> bool:
+        """Add a custom column name to a record"""
+        try:
+            db = _get_db_main()
+            now = datetime.utcnow().isoformat()
+            
+            res = db[RecordsAdapter.COLL].update_one(
+                {'_id': f"{guild_id}:{record_name}"},
+                {
+                    '$addToSet': {'custom_columns': str(column_name)},
+                    '$set': {'updated_at': now}
+                }
+            )
+            return res.modified_count > 0 or res.matched_count > 0
+        except Exception as e:
+            logger.error(f'Failed to add custom column {column_name} to {record_name}: {e}')
+            return False
+
+    @staticmethod
+    def remove_custom_column(guild_id: int, record_name: str, column_name: str) -> bool:
+        """Remove a custom column name from a record"""
+        try:
+            db = _get_db_main()
+            now = datetime.utcnow().isoformat()
+            
+            res = db[RecordsAdapter.COLL].update_one(
+                {'_id': f"{guild_id}:{record_name}"},
+                {
+                    '$pull': {'custom_columns': str(column_name)},
+                    '$set': {'updated_at': now}
+                }
+            )
+            return res.modified_count > 0
+        except Exception as e:
+            logger.error(f'Failed to remove custom column {column_name} from {record_name}: {e}')
+            return False
+
+    @staticmethod
     def get_all_records(guild_id: int) -> list:
         """Get all records for a guild"""
         try:
@@ -3050,18 +3100,28 @@ class RecordsAdapter:
                 logger.warning(f'Record {record_name} not found for guild {guild_id}')
                 return False
             
+            # Find existing member to preserve their custom data (like notes)
+            existing_member = next((m for m in record.get('members', []) if m.get('fid') == str(fid)), {})
+            
             # Remove existing member if present
             members = [m for m in record.get('members', []) if m.get('fid') != str(fid)]
             
-            # Add new member data
+            # Add new member data, preserving existing custom fields
             member_entry = {
                 'fid': str(fid),
                 'nickname': member_data.get('nickname', 'Unknown'),
                 'furnace_lv': int(member_data.get('furnace_lv', 0)),
                 'avatar_image': member_data.get('avatar_image', ''),
-                'added_at': now,
-                'added_by': member_data.get('added_by', 0)
+                'added_at': existing_member.get('added_at', now),
+                'added_by': existing_member.get('added_by', member_data.get('added_by', 0)),
+                'note': existing_member.get('note', '')
             }
+            
+            # Merge any other custom data from existing_member
+            for key, value in existing_member.items():
+                if key not in member_entry:
+                    member_entry[key] = value
+            
             members.append(member_entry)
             
             # Update record
@@ -3074,7 +3134,7 @@ class RecordsAdapter:
                     }
                 }
             )
-            logger.info(f'Added member {fid} to record {record_name} in guild {guild_id}')
+            logger.info(f'Added/Updated member {fid} in record {record_name} for guild {guild_id}')
             return True
         except Exception as e:
             logger.error(f'Failed to add member {fid} to record {record_name}: {e}')
@@ -3124,6 +3184,45 @@ class RecordsAdapter:
         except Exception as e:
             logger.error(f'Failed to get members for record {record_name}: {e}')
             return []
+
+    @staticmethod
+    def update_member_field(guild_id: int, record_name: str, fid: str, field_name: str, value: Any) -> bool:
+        """Update a specific field for a member in a record"""
+        try:
+            db = _get_db_main()
+            now = datetime.utcnow().isoformat()
+            
+            record = db[RecordsAdapter.COLL].find_one({
+                '_id': f"{guild_id}:{record_name}"
+            })
+            
+            if not record:
+                return False
+            
+            members = record.get('members', [])
+            member_found = False
+            for m in members:
+                if m.get('fid') == str(fid):
+                    m[field_name] = value
+                    member_found = True
+                    break
+            
+            if not member_found:
+                return False
+                
+            db[RecordsAdapter.COLL].update_one(
+                {'_id': f"{guild_id}:{record_name}"},
+                {
+                    '$set': {
+                        'members': members,
+                        'updated_at': now
+                    }
+                }
+            )
+            return True
+        except Exception as e:
+            logger.error(f'Failed to update member {fid} field {field_name} in record {record_name}: {e}')
+            return False
 
     @staticmethod
     async def create_record_async(guild_id: int, record_name: str, created_by: int) -> bool:
