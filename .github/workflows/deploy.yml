@@ -31,33 +31,45 @@ jobs:
               -o ConnectTimeout=30 \
               ${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }} << 'ENDSSH'
           echo "================================================"
-          echo "🤖 WOS Bot Auto-Deploy — \$(date)"
+          echo "🤖 WOS Bot Auto-Deploy — $(date)"
           echo "================================================"
 
-          # Find bot directory
-          if [ -d "~/app/bot" ]; then
-            BOT_DIR="~/app/bot"
-          elif [ -d "~/bot" ]; then
-            BOT_DIR="~/bot"
-          else
-            echo "❌ ERROR: Bot directory not found! (Tried ~/app/bot and ~/bot)"
-            exit 1
+          # Find bot directory by looking for .git folder
+          echo "🔍 Searching for bot directory..."
+          BOT_DIR=$(find ~ -name ".git" -type d -prune | head -n 1 | xargs dirname 2>/dev/null)
+          
+          if [ -z "$BOT_DIR" ]; then
+            echo "⚠️ Could not find .git directory with find. Trying common paths..."
+            if [ -d "~/app/bot" ]; then
+              BOT_DIR="~/app/bot"
+            elif [ -d "~/bot" ]; then
+              BOT_DIR="~/bot"
+            else
+              echo "❌ ERROR: Bot directory not found!"
+              exit 1
+            fi
           fi
           
-          cd \$BOT_DIR
-          echo "📂 Directory: \$(pwd)"
+          cd "$BOT_DIR"
+          echo "📂 Directory: $(pwd)"
 
           # Pull latest code
           echo ""
           echo "📥 Pulling latest code..."
+          # Ensure we are in a git repo
+          if [ ! -d ".git" ]; then
+            echo "❌ ERROR: $(pwd) is not a git repository!"
+            exit 1
+          fi
+          
           git fetch origin main
-          OLD=\$(git rev-parse --short HEAD)
+          OLD=$(git rev-parse --short HEAD)
           git reset --hard origin/main
-          NEW=\$(git rev-parse --short HEAD)
-          echo "✅ Updated: \$OLD → \$NEW — \$(git log -1 --pretty=%s)"
+          NEW=$(git rev-parse --short HEAD)
+          echo "✅ Updated: $OLD → $NEW — $(git log -1 --pretty=%s)"
 
           # Update dependencies if requirements.txt changed
-          if git diff --name-only \$OLD \$NEW | grep -q "requirements.txt"; then
+          if git diff --name-only $OLD $NEW | grep -q "requirements.txt"; then
             echo "📦 requirements.txt changed. Installing dependencies..."
             if [ -d "venv" ]; then
               source venv/bin/activate
