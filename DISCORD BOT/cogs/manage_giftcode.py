@@ -5876,8 +5876,9 @@ class ManageGiftCode(commands.Cog):
                                     if not code_str or status in ('invalid', 'expired'):
                                         continue
 
-                                    # Skip codes older than 90 days (if we have a date)
-                                    if created_at and created_at < cutoff_str:
+                                    # Skip codes older than 90 days or with missing timestamps
+                                    if not created_at or created_at < cutoff_str:
+                                        self.logger.debug(f"Skipping old/dateless code {code_str} (created_at: {created_at})")
                                         continue
 
                                     all_codes.append((code_str, date_str, processed, created_at))
@@ -5905,10 +5906,8 @@ class ManageGiftCode(commands.Cog):
                                 validation_status IS NULL
                                 OR (validation_status != 'invalid' AND validation_status != 'expired')
                             )
-                            AND (
-                                added_at IS NULL
-                                OR added_at >= datetime('now', '-90 days')
-                            )
+                            AND added_at IS NOT NULL
+                            AND added_at >= datetime('now', '-90 days')
                             ORDER BY
                                 CASE WHEN added_at IS NULL THEN 0 ELSE 1 END,
                                 added_at DESC
@@ -5986,14 +5985,19 @@ class ManageGiftCode(commands.Cog):
 
                             # --- Layer 2: Reset global flag in MongoDB ---
                             _mongo_enabled = globals().get('mongo_enabled', lambda: False)
-                            mongo_reset_attempted = False
+                            mongo_reset_status = "N/A"
                             if _mongo_enabled() and GiftCodesAdapter and hasattr(GiftCodesAdapter, 'reset_code_processed'):
                                 try:
-                                    mongo_reset_attempted = True
-                                    results['mongo_global'] = GiftCodesAdapter.reset_code_processed(selected_code)
-                                    self.cog.logger.info(f"[RESET] Layer 2 complete: MongoDB global flag reset={results['mongo_global']} for {selected_code}")
+                                    success = GiftCodesAdapter.reset_code_processed(selected_code)
+                                    results['mongo_global'] = True # Set to True to show green check if no error
+                                    mongo_reset_status = "OK" if success else "Not found (Already clean)"
+                                    self.cog.logger.info(f"[RESET] Layer 2: MongoDB global flag status: {mongo_reset_status} for {selected_code}")
                                 except Exception as e:
                                     self.cog.logger.error(f"[RESET] Layer 2 FAILED: {e}")
+                                    results['mongo_global'] = False
+                                    mongo_reset_status = "Error"
+                            else:
+                                results['mongo_global'] = True # Neutral success if MongoDB disabled
 
                             # --- Layer 3: Clear guild completion history in SQLite ---
                             try:
@@ -6008,13 +6012,17 @@ class ManageGiftCode(commands.Cog):
                                 self.cog.logger.error(f"[RESET] Layer 3 FAILED: {e}")
 
                             # --- Layer 4: Clear per-member redemption history in MongoDB ---
-                            mongo_members_attempted = False
+                            mongo_members_status = "N/A"
                             if _mongo_enabled() and AutoRedeemedCodesAdapter and hasattr(AutoRedeemedCodesAdapter, 'reset_code_redemptions'):
                                 try:
-                                    mongo_members_attempted = True
-                                    results['mongo_members'] = AutoRedeemedCodesAdapter.reset_code_redemptions(selected_code)
-                                    self.cog.logger.info(f"[RESET] Layer 4 OK: Deleted {results['mongo_members']} member redemption records for {selected_code}")
+                                    count = AutoRedeemedCodesAdapter.reset_code_redemptions(selected_code)
+                                    results['mongo_members'] = count
+                                    mongo_members_status = f"Cleared {count}"
+                                    self.cog.logger.info(f"[RESET] Layer 4 OK: Deleted {count} member redemption records for {selected_code}")
                                 except Exception as e:
+                                    self.cog.logger.error(f"[RESET] Layer 4 FAILED: {e}")
+                                    results['mongo_members'] = -1 # Error state
+                                    mongo_members_status = "Error"
                                     self.cog.logger.error(f"[RESET] Layer 4 FAILED: {e}")
 
                             any_success = results['sqlite_global'] or results['mongo_global'] or (mongo_reset_attempted and _mongo_enabled())
@@ -6030,9 +6038,9 @@ class ManageGiftCode(commands.Cog):
                                         f"**Code:** `{selected_code}`\n\n"
                                         f"**Layers Reset:**\n"
                                         f"{'✅' if results['sqlite_global'] else '❌'} Global flag (SQLite)\n"
-                                        f"{layer2_status} Global flag (MongoDB)\n"
+                                        f"{'✅' if results['mongo_global'] else '❌'} Global flag (MongoDB): {mongo_reset_status}\n"
                                         f"✅ Guild history cleared: **{results['sqlite_guilds']}** records\n"
-                                        f"✅ Member history cleared: **{results['mongo_members']}** records\n\n"
+                                        f"{'✅' if results['mongo_members'] >= 0 else '❌'} Member history cleared: **{max(0, results['mongo_members'])}** records {('(Error)' if results['mongo_members'] < 0 else '')}\n\n"
                                         f"**What happens next:**\n"
                                         f"• The code is now treated as **completely new**\n"
                                         f"• Click **Trigger Auto-Redeem** to start redemption\n"
