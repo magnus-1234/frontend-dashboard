@@ -2269,34 +2269,66 @@ class ManageGiftCode(commands.Cog):
             
             self.logger.info(f"Successfully fetched {len(api_codes)} codes from API")
             
-            # Get existing codes from database and keep uppercase for case-insensitive matching
-            self.cursor.execute("SELECT giftcode FROM gift_codes")
-            db_codes = {str(row[0]).upper() for row in self.cursor.fetchall()}
-            
             # Also fetch from MongoDB if enabled
+            db_codes_data = {} # code.upper() -> {'date': date, 'processed': bool}
+            
+            # Fetch from SQLite
+            self.cursor.execute("SELECT giftcode, date, auto_redeem_processed FROM gift_codes")
+            for row in self.cursor.fetchall():
+                db_codes_data[str(row[0]).upper()] = {'date': row[1], 'processed': bool(row[2])}
+            
             if mongo_enabled() and GiftCodesAdapter:
                 try:
-                    # GiftCodesAdapter.get_all() returns list of tuples: (code, date, validation_status)
-                    mongo_codes = GiftCodesAdapter.get_all()
-                    for c in mongo_codes:
-                        if c and c[0]:
-                             db_codes.add(str(c[0]).upper())
+                    # GiftCodesAdapter.get_all_with_status() returns list of dicts
+                    mongo_codes = GiftCodesAdapter.get_all_with_status()
+                    if mongo_codes:
+                        for c in mongo_codes:
+                            code_up = str(c.get('giftcode', '')).upper()
+                            if code_up:
+                                db_codes_data[code_up] = {
+                                    'date': c.get('date'),
+                                    'processed': bool(c.get('auto_redeem_processed', False))
+                                }
                 except Exception as e:
                     self.logger.error(f"Failed to fetch codes from Mongo: {e}")
 
-            self.logger.info(f"Found {len(db_codes)} existing codes in database(s)")
+            self.logger.info(f"Found {len(db_codes_data)} existing codes in database(s)")
             
             # Find new codes
             new_codes = []
             for code, date in api_codes:
-                if str(code).upper() not in db_codes:
+                code_up = str(code).upper()
+                if code_up not in db_codes_data:
                     new_codes.append((code, date))
+                else:
+                    # Potential re-issue? 
+                    # If it was already processed but the API is still returning it with a NEW date 
+                    # or it's been marked processed a long time ago, we might want to re-trigger.
+                    # For now, let's just allow it if it was marked processed but we want to be safe.
+                    # Actually, a better check: if the date in API is different/newer than stored date.
+                    stored_date = db_codes_data[code_up]['date']
+                    if stored_date and date and date != stored_date:
+                        self.logger.info(f"♻️ Re-issued code detected: {code} (Old Date: {stored_date}, New Date: {date}). Re-triggering auto-redeem.")
+                        new_codes.append((code, date))
+                        # Reset processed flag in DB so it actually runs
+                        try:
+                            # Update SQLite
+                            self.cursor.execute("UPDATE gift_codes SET auto_redeem_processed = 0, date = ? WHERE giftcode = ?", (date, code))
+                            # Update MongoDB
+                            if mongo_enabled() and GiftCodesAdapter:
+                                try:
+                                    db = get_mongo_db()
+                                    db['gift_codes'].update_one({'_id': code}, {'$set': {'auto_redeem_processed': False, 'date': date}})
+                                except Exception as me:
+                                    self.logger.error(f"Failed to reset Mongo processed status for {code}: {me}")
+                        except Exception as e:
+                            self.logger.error(f"Failed to reset re-issued code {code}: {e}")
             
             if not new_codes:
-                self.logger.info(f"No new codes found. All {len(api_codes)} API codes already in database")
+                self.logger.info(f"No new codes found. All {len(api_codes)} API codes already in database and processed")
                 return
             
-            self.logger.info(f"Found {len(new_codes)} new gift codes!")
+            self.logger.info(f"Found {len(new_codes)} codes to process (new or re-issued)!")
             
             # Add new codes to database with auto_redeem_processed = 0
             for code, date in new_codes:
@@ -2827,10 +2859,15 @@ class ManageGiftCode(commands.Cog):
                     result = self.cursor.fetchone()
                     already_processed = result[0] if result and result[0] else 0
                 
-                is_recheck = False
-                if already_processed:
+                # Determine if this is a manual trigger (is_recheck) by checking the parameter
+                # Passed to trigger_auto_redeem_for_new_codes
+                
+                if already_processed and not is_recheck:
                     self.logger.info(f"⏭️ Skipping code {code} - already fully processed")
                     continue  # Skip this code entirely
+                
+                if is_recheck:
+                    self.logger.info(f"🔄 Manual Trigger: Bypassing completion status for code {code}")
                 
                 # --- NEW: Filter out guilds that have already completed this code ---
                 try:

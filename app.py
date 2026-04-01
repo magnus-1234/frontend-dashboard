@@ -58,7 +58,7 @@ def ensure_dependencies_installed():
         pass
 
     if current_hash and current_hash == saved_hash:
-        print("[SETUP] ✓ Requirements unchanged — skipping pip install (using cached environment)")
+        print("[SETUP] Requirements unchanged -- skipping pip install (using cached environment)")
         importlib.invalidate_caches()
         return True
 
@@ -71,7 +71,7 @@ def ensure_dependencies_installed():
             stderr=sys.stderr,
             timeout=1800  # 30 minutes max
         )
-        print("[SETUP] ✓ Dependencies installed successfully")
+        print("[SETUP] Dependencies installed successfully")
 
         # Save new hash so next startup skips install
         if current_hash:
