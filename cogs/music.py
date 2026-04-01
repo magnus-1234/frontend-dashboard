@@ -2396,7 +2396,7 @@ class Music(commands.Cog):
                     
                     # Reconnect to voice channel
                     if player.channel:
-                        new_player: CustomPlayer = await player.channel.connect(cls=CustomPlayer, timeout=30.0, self_deaf=True)
+                        new_player: CustomPlayer = await player.channel.connect(cls=CustomPlayer, timeout=60.0, self_deaf=True)
                         
                         # Optimize voice quality
                         await self.optimize_voice_quality(player.channel)
@@ -2668,7 +2668,7 @@ class Music(commands.Cog):
                 
                 player = None
                 max_connect_retries = 2  # Fewer retries, but much longer timeout
-                connect_timeout = 30.0  # Increased timeout for public Lavalink servers which can be slow
+                connect_timeout = 60.0  # Increased timeout for public Lavalink servers which can be slow
                 
                 for attempt in range(max_connect_retries):
                     try:
@@ -2798,7 +2798,7 @@ class Music(commands.Cog):
                     return
 
                 try:
-                    player = await target_channel.connect(cls=CustomPlayer, timeout=30.0, self_deaf=True)
+                    player = await target_channel.connect(cls=CustomPlayer, timeout=60.0, self_deaf=True)
                     player.text_channel = channel
                 except Exception as e:
                     msg = f"❌ Failed to connect to voice: {e}"
