@@ -58,7 +58,7 @@ def ensure_dependencies_installed():
         pass
 
     if current_hash and current_hash == saved_hash:
-        print("[SETUP] ✓ Requirements unchanged — skipping pip install (using cached environment)")
+        print("[SETUP] Requirements unchanged -- skipping pip install (using cached environment)")
         importlib.invalidate_caches()
         return True
 
@@ -71,7 +71,7 @@ def ensure_dependencies_installed():
             stderr=sys.stderr,
             timeout=1800  # 30 minutes max
         )
-        print("[SETUP] ✓ Dependencies installed successfully")
+        print("[SETUP] Dependencies installed successfully")
 
         # Save new hash so next startup skips install
         if current_hash:
@@ -152,20 +152,6 @@ import os
 from urllib.parse import quote
 
 import json
-from bson import ObjectId
-
-class MongoJSONEncoder(json.JSONEncoder):
-    def default(self, o):
-        if isinstance(o, ObjectId):
-            return str(o)
-        return super().default(o)
-
-def mongo_dumps(obj, **kwargs):
-    return json.dumps(obj, cls=MongoJSONEncoder, **kwargs)
-
-def mongo_dump(obj, fp, **kwargs):
-    return json.dump(obj, fp, cls=MongoJSONEncoder, **kwargs)
-
 import logging
 from api_manager import make_request, manager, make_image_request
 
@@ -361,7 +347,6 @@ import time
 from pathlib import Path
 import re
 from wos_api import fetch_player_info
-
 from beartrap_rag import is_beartrap_question, answer_beartrap_question
  
 # Ensure stdout/stderr use UTF-8 to avoid UnicodeEncodeError on Windows consoles
@@ -499,7 +484,7 @@ def load_feedback_state():
 def save_feedback_state(state: dict):
     try:
         with FEEDBACK_STATE_PATH.open('w', encoding='utf-8') as f:
-            mongo_dump(state, f, indent=2)
+            json.dump(state, f, indent=2)
         return True
     except Exception as e:
         try:
@@ -529,7 +514,7 @@ def append_feedback_log(user, user_id, feedback_text, posted_channel=False, post
             'feedback': feedback_text[:4000]
         }
         with FEEDBACK_LOG_PATH.open('a', encoding='utf-8') as f:
-            f.write(mongo_dumps(entry, ensure_ascii=False) + "\n")
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     except Exception as e:
         try:
             logger.error(f"Failed to append feedback log: {e}")
@@ -595,6 +580,7 @@ async def fetch_pollinations_image(prompt_text: str, width: int = None, height: 
             else:
                 text = await resp.text()
                 raise Exception(f"Pollinations request failed: {resp.status} - {text}")
+
 
 
 def detect_image_request(text: str):
@@ -927,12 +913,13 @@ async def setup_hook():
         "cogs.server_age",
         "cogs.personalise_chat",
         "cogs.music",  # Music bot functionality
-        #"cogs.voice_conversation",  # Voice chat with AI
-        #"cogs.tts",  # Text-to-Speech in voice channels
-        #"cogs.auto_translate",  # Auto-translate with DeepL
+        "cogs.voice_conversation",  # Voice chat with AI
+        "cogs.tts",  # Text-to-Speech in voice channels
+        "cogs.auto_translate",  # Auto-translate with DeepL
         "cogs.message_extractor",  # Message extraction for global admins
         "cogs.tictactoe",  # Tic-Tac-Toe game
-        #"cogs.alliance_monitor",  # Alliance online status monitoring
+        "cogs.alliance_monitor",  # Alliance online status monitoring
+        # NOTE: cogs.start_menu removed from here — it was duplicated (also at top of list)
         "cogs.debug_mongo_cog",  # Temporary debug cog for MongoDB
     ]
     
@@ -945,13 +932,14 @@ async def setup_hook():
             logger.info(f"✅ Loaded {cog_name}")
             loaded_count += 1
         except commands.ExtensionAlreadyLoaded:
-            # Already loaded by a previous setup_hook call (e.g. PM2 overlap restart)
-            # Silently skip — the cog is already running, no action needed
+            # Already loaded (e.g. PM2 overlap restart or duplicate list entry)
+            # Silently skip — the cog is already running
             logger.debug(f"⏭️  Skipped {cog_name} (already loaded)")
             loaded_count += 1  # Count it as successfully loaded
         except Exception as e:
             logger.error(f"❌ Failed to load {cog_name}: {e}", exc_info=True)
             failed_count += 1
+
     
     logger.info(f"📦 Cog loading complete: {loaded_count} loaded, {failed_count} failed")
     
@@ -1034,6 +1022,14 @@ async def setup_hook():
         logger.info("✅ Keep-alive task started (runs every 5 minutes)")
     except Exception as e:
         logger.error(f"❌ Failed to start keep-alive task: {e}")
+
+    # Start giftcode auto-poster background loop (Checks every 5 minutes)
+    try:
+        import giftcode_poster
+        asyncio.create_task(giftcode_poster.start_poster(bot, interval=300))
+        logger.info("✅ Giftcode auto-poster background task started (5m interval)")
+    except Exception as e:
+        logger.error(f"❌ Failed to start giftcode auto-poster task: {e}")
 
     # Restore persistent views from MongoDB
     async def restore_persistent_views():
@@ -1145,14 +1141,6 @@ async def on_ready():
         # Sync commands automatically to fix visibility issues
         synced = await bot.tree.sync()
         logger.info(f"✅ Synced {len(synced)} commands globally")
-        
-        # Start gift code poster background task
-        try:
-            import giftcode_poster
-            asyncio.create_task(giftcode_poster.start_poster(bot))
-            logger.info("🚀 Started gift code poster background task")
-        except Exception as e:
-            logger.error(f"❌ Failed to start gift code poster: {e}")
         
     except Exception as e:
         logger.error(f"❌ Error in on_ready: {e}", exc_info=True)
@@ -1317,7 +1305,7 @@ async def on_message(message: discord.Message):
                 # Show typing indicator for text response
                 async with message.channel.typing():
                     # Get known user name for personalization
-                    user_name = get_known_user_name(message.author.id)
+                    user_name = get_known_user_name(message.author.id) or message.author.display_name
                     
                     # Build messages for OpenRouter
                     system_prompt = get_system_prompt(user_name)
@@ -1356,96 +1344,90 @@ async def on_message(message: discord.Message):
                     pass
             return
         
+        # ── AI response when bot is @mentioned or when someone replies to the bot ──
+        if message.guild:
+            bot_mentioned = bot.user in message.mentions
+            is_reply_to_bot = (
+                message.reference is not None
+                and message.reference.resolved is not None
+                and isinstance(message.reference.resolved, discord.Message)
+                and message.reference.resolved.author == bot.user
+            )
+
+            if bot_mentioned or is_reply_to_bot:
+                try:
+                    # Strip the bot mention from the message content so the AI
+                    # doesn't see "<@ID>" as part of the question.
+                    raw_content = message.content
+                    for mention in message.mentions:
+                        raw_content = raw_content.replace(f"<@{mention.id}>", "").replace(f"<@!{mention.id}>", "")
+                    user_question = raw_content.strip()
+
+                    if not user_question:
+                        await message.reply("Hey! 👋 You mentioned me — what can I help you with?", mention_author=True)
+                        return
+
+                    # Check for image-generation request first
+                    is_image_req, img_prompt = detect_image_request(user_question)
+                    if is_image_req and img_prompt:
+                        async with message.channel.typing():
+                            try:
+                                image_bytes = await fetch_pollinations_image(img_prompt)
+                                from io import BytesIO
+                                file = discord.File(BytesIO(image_bytes), filename="generated.png")
+                                embed = discord.Embed(
+                                    title="🎨 Generated Image",
+                                    description=f"**Prompt:** {img_prompt}",
+                                    color=0x00FF7F,
+                                )
+                                embed.set_image(url="attachment://generated.png")
+                                embed.set_footer(text="Powered by Pollinations.ai")
+                                view = PollinateButtonView()
+                                await message.reply(embed=embed, file=file, view=view, mention_author=False)
+                            except Exception as img_err:
+                                logger.error(f"Image generation error (mention/reply): {img_err}")
+                                await message.reply(f"Sorry, I couldn't generate that image. Error: {img_err}", mention_author=True)
+                        return
+
+                    # Regular AI text response
+                    async with message.channel.typing():
+                        user_id_str = str(message.author.id)
+                        user_name = get_known_user_name(message.author.id) or message.author.display_name
+
+                        # Refresh live WOS stats if user is personalized (has player_id saved)
+                        try:
+                            await angel_personality.refresh_game_stats(user_id_str)
+                        except Exception as _refresh_err:
+                            logger.warning(f"Could not refresh game stats for {user_id_str}: {_refresh_err}")
+
+                        system_prompt = get_system_prompt(user_name, user_id_str)
+                        ai_messages = [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_question},
+                        ]
+                        try:
+                            ai_response = await make_request(ai_messages, max_tokens=800, include_sheet_data=True)
+                            if not ai_response or not ai_response.strip():
+                                await message.reply("I heard you, but couldn't think of a reply right now. Try again! 🙏", mention_author=True)
+                                return
+                            # Split if too long
+                            if len(ai_response) <= 2000:
+                                await message.reply(ai_response, mention_author=False)
+                            else:
+                                chunks = [ai_response[i:i+2000] for i in range(0, len(ai_response), 2000)]
+                                await message.reply(chunks[0], mention_author=False)
+                                for chunk in chunks[1:]:
+                                    await message.channel.send(chunk)
+                        except Exception as ai_err:
+                            logger.error(f"AI error in mention/reply handler: {ai_err}")
+                            await message.reply("Oops, I hit an error processing your message. Please try again later! 😅", mention_author=True)
+                except Exception as mention_err:
+                    logger.error(f"Error in mention/reply handler: {mention_err}", exc_info=True)
+                return  # Don't fall through to keyword triggers when the bot was mentioned/replied to
+
         # Handle keyword triggers in guild channels
         if message.guild:
             content_lower = message.content.lower().strip()
-            
-            # ICE Deduplication Master Override
-            if message.content.strip() == '!trigger_ice_cleanup' and message.author.guild_permissions.administrator:
-                await message.channel.send("Processing ICE alliance cleanup directly from core handler... Please wait.")
-                try:
-                    from db.mongo_adapters import _get_db_main_async, AutoRedeemMembersAdapter
-                    from datetime import datetime
-                    
-                    db_main = await _get_db_main_async()
-                    alliance = await db_main['alliance__alliance_list'].find_one({'name': 'ICE'})
-                    if not alliance:
-                        await message.channel.send('ERROR: ICE alliance not found')
-                        return
-                    
-                    guild_id = alliance.get('discord_server_id')
-                    if not guild_id:
-                        await message.channel.send('ERROR: Guild ID not found for ICE')
-                        return
-                    
-                    search_gid = [int(guild_id), str(guild_id)]
-                    unique_members_data = {}
-                    docs_to_delete = []
-                    total_found = 0
-                    
-                    for db in await AutoRedeemMembersAdapter._get_target_dbs_async():
-                        coll = db['auto_redeem_members']
-                        cursor = coll.find({'guild_id': {'$in': search_gid}})
-                        docs = await cursor.to_list(length=None)
-                        total_found += len(docs)
-                        
-                        for doc in docs:
-                            doc_id = doc['_id']
-                            if 'fid' in doc and doc['fid'] and str(doc['fid']).lower() != 'none':
-                                fid = str(doc['fid']).strip()
-                                if fid not in unique_members_data:
-                                    unique_members_data[fid] = doc
-                                else:
-                                    docs_to_delete.append((db.name, doc_id))
-                            elif 'members' in doc and isinstance(doc['members'], list):
-                                for m in doc['members']:
-                                    mfid = m.get('fid')
-                                    if mfid and str(mfid).lower() != 'none':
-                                        mfid = str(mfid).strip()
-                                        if mfid not in unique_members_data:
-                                            unique_members_data[mfid] = {
-                                                'guild_id': int(guild_id),
-                                                'fid': mfid,
-                                                'nickname': m.get('nickname', 'Unknown'),
-                                                'furnace_lv': int(m.get('furnace_lv', 0)),
-                                                'avatar_image': m.get('avatar_image', ''),
-                                                'added_by': int(m.get('added_by', 0)),
-                                                'added_at': m.get('added_at', datetime.utcnow().isoformat())
-                                            }
-                                docs_to_delete.append((db.name, doc_id))
-
-                    msg = f'Found {total_found} docs. Identified {len(unique_members_data)} unique FIDs.\n'
-                    msg += f'Docs to delete: {len(docs_to_delete)}\n'
-                    
-                    if docs_to_delete:
-                        deleted = 0
-                        for db_name, doc_id in docs_to_delete:
-                            for d in await AutoRedeemMembersAdapter._get_target_dbs_async():
-                                if d.name == db_name:
-                                    res = await d['auto_redeem_members'].delete_one({'_id': doc_id})
-                                    deleted += res.deleted_count
-                                    break
-                        msg += f'Deleted {deleted} duplicate/legacy docs.\n'
-                        
-                        main_coll = db_main['auto_redeem_members']
-                        upserted = 0
-                        for fid, data in unique_members_data.items():
-                            data.pop('_id', None)
-                            res = await main_coll.update_one(
-                                {'guild_id': int(guild_id), 'fid': str(fid)},
-                                {'$set': data},
-                                upsert=True
-                            )
-                            if getattr(res, 'upserted_id', None) or getattr(res, 'modified_count', 0) > 0:
-                                upserted += 1
-                        msg += f'Upserted {upserted} unique members.\n'
-                    
-                    await message.channel.send(msg)
-                    logger.info(msg)
-                except Exception as e:
-                    logger.error(f'Error in trigger_ice_cleanup: {e}')
-                    await message.channel.send(f'Error: {e}')
-                return # Skip bot.process_commands to avoid CommandNotFound
             
             # Check for dice/roll keywords
             if any(keyword in content_lower for keyword in ['dice', 'roll']):
@@ -1615,6 +1597,22 @@ file_formatter = logging.Formatter('%(asctime)s - %(message)s')
 file_handler.setFormatter(file_formatter)
 logger.addHandler(file_handler)
 
+# User-requested standard log files
+try:
+    # Standard output log (INFO and above)
+    out_log = logging.FileHandler('discordbot-out.log', mode='a', encoding='utf-8')
+    out_log.setLevel(logging.INFO)
+    out_log.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s'))
+    logging.getLogger().addHandler(out_log)
+
+    # Standard error log (WARNING and above)
+    err_log = logging.FileHandler('discordbot-error.log', mode='a', encoding='utf-8')
+    err_log.setLevel(logging.WARNING)
+    err_log.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s'))
+    logging.getLogger().addHandler(err_log)
+except Exception as log_error:
+    print(f"[WARN] Failed to setup standard log files: {log_error}")
+
 # Structured JSONL chat log for programmatic analysis (one JSON object per line)
 CHAT_LOG_JSONL = LOG_DIR / 'chat_logs.jsonl'
 def append_chat_log(entry: dict):
@@ -1625,7 +1623,7 @@ def append_chat_log(entry: dict):
     """
     try:
         with CHAT_LOG_JSONL.open('a', encoding='utf-8') as jf:
-            jf.write(mongo_dumps(entry, ensure_ascii=False) + "\n")
+            jf.write(json.dumps(entry, ensure_ascii=False) + "\n")
     except Exception:
         # If the structured log fails, write a minimal fallback to the human log
         try:
@@ -2008,7 +2006,7 @@ def save_birthdays(data: dict) -> bool:
             except Exception:
                 pass
         with BIRTHDAY_FILE.open('w', encoding='utf-8') as f:
-            mongo_dump(data, f, indent=2)
+            json.dump(data, f, indent=2)
         return True
     except Exception as e:
         logger.error(f"Failed to save birthdays file: {e}")
@@ -4386,27 +4384,44 @@ def check_and_install_requirements():
     if not os.path.exists("requirements.txt"):
         print("No requirements.txt found")
         return False
+    
+    import importlib.metadata
+    
     with open("requirements.txt", "r") as f:
-        requirements = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+        # Filter commented out or empty lines
+        requirements = [line.strip() for line in f if line.strip() and not line.strip().startswith("#")]
 
     missing_packages = []
     for requirement in requirements:
-        package_name = requirement.split("==")[0].split(">=")[0].split("<=")[0].split("~=")[0].split("!=")[0]
+        # Get the distribution name (e.g. 'discord.py' from 'discord.py>=2.5.2')
+        # This handles common operators (==, >=, <=, ~=, !=)
+        dist_name = requirement.split("==")[0].split(">=")[0].split("<=")[0].split("~=")[0].split("!=")[0].strip()
+        
+        # Strip square brackets (extras) like [socks] in aiohttp[socks]
+        if "[" in dist_name:
+            dist_name = dist_name.split("[")[0].strip()
+            
         try:
-            __import__(package_name)
-        except Exception:
+            importlib.metadata.version(dist_name)
+        except importlib.metadata.PackageNotFoundError:
+            # Common overrides where distribution name != module name, though metadata version check
+            # should generally work with the name as it appears in requirements.txt (the distribution name).
             missing_packages.append(requirement)
 
     if missing_packages:
         print(f"Installing {len(missing_packages)} missing packages...")
         for package in missing_packages:
             try:
+                # Use --no-cache-dir to avoid stale cache issues, and timeout for safety
                 cmd = [sys.executable, "-m", "pip", "install", package, "--no-cache-dir"]
                 subprocess.check_call(cmd, timeout=1200)
-                print(f"Installed {package}")
+                print(f"✅ Installed {package}")
             except Exception as e:
-                print(f"Failed to install {package}: {e}")
-                return False
+                print(f"❌ Failed to install {package}: {e}")
+                # We optionally continue but usually it's better to fail early if core is missing
+                # return False 
+    
+    # Check for core packages one last time before declaring success
     print("All requirements satisfied")
     return True
 

@@ -35,31 +35,43 @@ jobs:
           echo "🤖 WOS Bot Auto-Deploy — $(date)"
           echo "================================================"
 
-          # Try to find the bot directory
-          for dir in "$HOME/app/bot" "$HOME/bot" "$HOME/WOS-BOT-1"; do
+          # Comprehensive directory search
+          POSSIBLE_DIRS=(
+            "$HOME/app/bot"
+            "$HOME/bot"
+            "$HOME/WOS-BOT-1"
+            "$HOME/app/bot/DISCORD BOT"
+            "$HOME/bot/DISCORD BOT"
+          )
+          
+          BOT_DIR=""
+          for dir in "${POSSIBLE_DIRS[@]}"; do
             if [ -d "$dir/.git" ]; then
               BOT_DIR="$dir"
+              echo "✅ Found bot directory: $BOT_DIR"
               break
             fi
           done
 
           if [ -z "$BOT_DIR" ]; then
-            echo "🔍 Searching with find..."
-            BOT_DIR=$(find $HOME -name ".git" -type d -prune | head -n 1 | xargs -r dirname 2>/dev/null)
+            echo "🔍 Searching with find (this may take a moment)..."
+            BOT_DIR=$(find $HOME -name ".git" -type d -prune 2>/dev/null | head -n 1 | xargs -r dirname 2>/dev/null)
           fi
 
           if [ -z "$BOT_DIR" ]; then
-            echo "❌ ERROR: Bot directory not found!"
-            ls -R $HOME | head -n 20
+            echo "❌ ERROR: Bot directory not found! Listing home directory contents:"
+            ls -la $HOME
             exit 1
           fi
           
           cd "$BOT_DIR"
-          echo "📂 Directory: $(pwd)"
+          echo "📂 Working directory: $(pwd)"
 
           # Pull latest code
           echo ""
           echo "📥 Pulling latest code..."
+          # Make sure we're on the right branch
+          git checkout main || git checkout -b main
           git fetch origin main
           OLD=$(git rev-parse --short HEAD || echo "unknown")
           git reset --hard FETCH_HEAD
@@ -69,19 +81,33 @@ jobs:
           # Update dependencies if requirements.txt changed
           if [ -f "requirements.txt" ]; then
             echo "📦 Checking dependencies..."
+            # Try to find pip in venv
             if [ -f "venv/bin/pip" ]; then
+              ./venv/bin/pip install --upgrade pip
               ./venv/bin/pip install -r requirements.txt
+            elif [ -f "bot_venv/bin/pip" ]; then
+              ./bot_venv/bin/pip install --upgrade pip
+              ./bot_venv/bin/pip install -r requirements.txt
             else
+              pip3 install --upgrade pip || true
               pip3 install -r requirements.txt || pip install -r requirements.txt
             fi
+            echo "✅ Dependencies check complete"
           fi
 
           # Restart bot
           echo ""
           echo "🔄 Restarting bot..."
-          pm2 restart discordbot --update-env || pm2 start app.py --name discordbot
+          # Find PM2 process name (default: discordbot)
+          PROCESS_NAME=$(pm2 list | grep -E "discordbot|bot" | awk '{print $2}' | head -n 1)
+          if [ -z "$PROCESS_NAME" ]; then
+            PROCESS_NAME="discordbot"
+          fi
+          
+          echo "🔄 Using process name: $PROCESS_NAME"
+          pm2 restart "$PROCESS_NAME" --update-env || pm2 start app.py --name "$PROCESS_NAME"
+          
           echo "✅ Bot restarted"
-
           echo ""
           pm2 status
           echo ""
