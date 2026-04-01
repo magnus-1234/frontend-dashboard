@@ -5877,6 +5877,13 @@ class ManageGiftCode(commands.Cog):
                 
                 # Try MongoDB first - use get_all() method
                 _mongo_enabled = globals().get('mongo_enabled', lambda: False)
+                cutoff_date = datetime.utcnow().replace(microsecond=0)
+                cutoff_date = cutoff_date.replace(
+                    year=cutoff_date.year if cutoff_date.month > 3 else cutoff_date.year - 1,
+                    month=cutoff_date.month - 3 if cutoff_date.month > 3 else cutoff_date.month + 9
+                )  # 90 days ago (approximate)
+                cutoff_str = cutoff_date.isoformat()
+
                 if _mongo_enabled() and GiftCodesAdapter:
                     try:
                         mongo_codes = GiftCodesAdapter.get_all()
@@ -5884,47 +5891,68 @@ class ManageGiftCode(commands.Cog):
                             all_codes = []
                             for code_data in mongo_codes:
                                 try:
-                                    # Handle different formats: tuple, dict, or other
                                     if isinstance(code_data, tuple):
                                         code_str = str(code_data[0]) if code_data else ''
                                         date_str = str(code_data[1]) if len(code_data) > 1 else ''
                                         processed = code_data[2] if len(code_data) > 2 else False
+                                        status = 'pending'
+                                        created_at = ''
                                     elif isinstance(code_data, dict):
                                         code_str = str(code_data.get('giftcode', ''))
                                         date_str = str(code_data.get('date', ''))
                                         processed = code_data.get('auto_redeem_processed', False)
                                         status = code_data.get('validation_status', 'pending')
+                                        created_at = str(code_data.get('created_at', '') or '')
                                     else:
-                                        # Unknown format, convert to string
                                         code_str = str(code_data)
                                         date_str = ''
                                         processed = False
                                         status = 'pending'
-                                    
-                                    # Only include active codes (skip invalid/expired ones)
-                                    if code_str and status not in ('invalid', 'expired'):
-                                        all_codes.append((code_str, date_str, processed))
+                                        created_at = ''
+
+                                    # Skip invalid/expired codes
+                                    if not code_str or status in ('invalid', 'expired'):
+                                        continue
+
+                                    # Skip codes older than 90 days (if we have a date)
+                                    if created_at and created_at < cutoff_str:
+                                        continue
+
+                                    all_codes.append((code_str, date_str, processed, created_at))
                                 except Exception as e:
                                     self.logger.warning(f"Failed to parse MongoDB code entry: {e}")
                                     continue
-                            
-                            self.logger.info(f"Fetched {len(all_codes)} codes from MongoDB for reset")
+
+                            # Sort by created_at descending (newest first), empty dates last
+                            all_codes.sort(key=lambda x: x[3] or '0', reverse=True)
+                            # Strip the created_at field used for sorting
+                            all_codes = [(c[0], c[1], c[2]) for c in all_codes]
+
+                            self.logger.info(f"Fetched {len(all_codes)} active recent codes from MongoDB for reset")
                     except Exception as e:
                         self.logger.warning(f"Failed to fetch codes from MongoDB: {e}")
                 
                 # Fallback to SQLite if MongoDB failed or not enabled
                 if not all_codes:
                     try:
-                        self.logger.info("📂 Fetching codes from SQLite database...")
+                        self.logger.info("📂 Fetching active codes from SQLite database...")
                         self.cursor.execute("""
                             SELECT giftcode, date, auto_redeem_processed
                             FROM gift_codes
-                            WHERE validation_status IS NULL
-                               OR (validation_status != 'invalid' AND validation_status != 'expired')
-                            ORDER BY added_at DESC
+                            WHERE (
+                                validation_status IS NULL
+                                OR (validation_status != 'invalid' AND validation_status != 'expired')
+                            )
+                            AND (
+                                added_at IS NULL
+                                OR added_at >= datetime('now', '-90 days')
+                            )
+                            ORDER BY
+                                CASE WHEN added_at IS NULL THEN 0 ELSE 1 END,
+                                added_at DESC
                         """)
                         all_codes = self.cursor.fetchall()
-                        self.logger.info(f"Fetched {len(all_codes)} active codes from SQLite for reset")
+                        self.logger.info(f"Fetched {len(all_codes)} active recent codes from SQLite for reset")
                     except Exception as e:
                         self.logger.error(f"❌ SQLite fetch failed: {e}")
                 
