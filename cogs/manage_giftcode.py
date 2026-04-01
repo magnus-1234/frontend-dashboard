@@ -1495,7 +1495,7 @@ class ManageGiftCode(commands.Cog):
                 return
             
             # Get all auto-redeem members using MongoDB-first helper
-            members_data = await self.AutoRedeemDB.get_members(self, guild_id)
+            members_data = await self.AutoRedeemDB.get_members_async(self, guild_id)
             
             if not members_data:
                 self.logger.info(f"No auto-redeem members for guild {guild_id}")
@@ -1507,7 +1507,15 @@ class ManageGiftCode(commands.Cog):
             members_to_process = []
             skipped_count = 0
             
-            if mongo_enabled() and AutoRedeemedCodesAdapter:
+            # CRITICAL: If is_recheck is True (Manual Trigger), we bypass the member-level redemption cache
+            # to force a retry for everyone in this guild.
+            if is_recheck:
+                self.logger.info(f"🔄 Manual Trigger: Bypassing member-level redemption cache for code {giftcode}")
+                members_to_process = [
+                    (member['fid'], member['nickname'], member.get('furnace_lv', 0))
+                    for member in members_data
+                ]
+            elif mongo_enabled() and AutoRedeemedCodesAdapter:
                 try:
                     # Batch check all FIDs at once to prevent event loop blocking
                     self.logger.info(f"🔍 Batch checking {len(members_data)} members for code {giftcode}...")
@@ -1552,6 +1560,7 @@ class ManageGiftCode(commands.Cog):
             
             if not members:
                 # If silent_on_skip is True, we don't send any message if there's no work to do
+                # Note: Manual triggers (is_recheck=True) will now have members, so this won't trigger.
                 if silent_on_skip:
                     self.logger.info(f"✅ Silent skip: All {len(members_data)} members have already redeemed code {giftcode} for guild {guild_id}")
                     return
@@ -2817,16 +2826,18 @@ class ManageGiftCode(commands.Cog):
 
             if is_recheck:
                 self.logger.info(f"🔄 Manual Trigger: Bypassing completion status for code {code}")
-
-            completed_guilds = await self._get_completed_guilds(code)
-            pending_guilds = [g for g in enabled_guilds if g[0] not in completed_guilds]
+                # For manual trigger, we process ALL enabled guilds, bypassing the 'completed' cache
+                pending_guilds = enabled_guilds
+            else:
+                completed_guilds = await self._get_completed_guilds(code)
+                pending_guilds = [g for g in enabled_guilds if g[0] not in completed_guilds]
 
             if not pending_guilds:
                 self.logger.info(f"⏭️ Skipping code {code} - already processed by all {len(enabled_guilds)} enabled guilds!")
                 await self._mark_code_done(code)
                 return
 
-            self.logger.info(f"🎯 Processing code {code} for {len(pending_guilds)} guilds... (Skipped {len(completed_guilds)})")
+            self.logger.info(f"🎯 Processing code {code} for {len(pending_guilds)} guilds... (Recheck: {is_recheck})")
             
             for (guild_id,) in pending_guilds:
                 self.auto_redeem_queue.put_nowait((guild_id, code, is_recheck))
