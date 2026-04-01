@@ -1344,6 +1344,79 @@ async def on_message(message: discord.Message):
                     pass
             return
         
+        # ── AI response when bot is @mentioned or when someone replies to the bot ──
+        if message.guild:
+            bot_mentioned = bot.user in message.mentions
+            is_reply_to_bot = (
+                message.reference is not None
+                and message.reference.resolved is not None
+                and isinstance(message.reference.resolved, discord.Message)
+                and message.reference.resolved.author == bot.user
+            )
+
+            if bot_mentioned or is_reply_to_bot:
+                try:
+                    # Strip the bot mention from the message content so the AI
+                    # doesn't see "<@ID>" as part of the question.
+                    raw_content = message.content
+                    for mention in message.mentions:
+                        raw_content = raw_content.replace(f"<@{mention.id}>", "").replace(f"<@!{mention.id}>", "")
+                    user_question = raw_content.strip()
+
+                    if not user_question:
+                        await message.reply("Hey! 👋 You mentioned me — what can I help you with?", mention_author=True)
+                        return
+
+                    # Check for image-generation request first
+                    is_image_req, img_prompt = detect_image_request(user_question)
+                    if is_image_req and img_prompt:
+                        async with message.channel.typing():
+                            try:
+                                image_bytes = await fetch_pollinations_image(img_prompt)
+                                from io import BytesIO
+                                file = discord.File(BytesIO(image_bytes), filename="generated.png")
+                                embed = discord.Embed(
+                                    title="🎨 Generated Image",
+                                    description=f"**Prompt:** {img_prompt}",
+                                    color=0x00FF7F,
+                                )
+                                embed.set_image(url="attachment://generated.png")
+                                embed.set_footer(text="Powered by Pollinations.ai")
+                                view = PollinateButtonView()
+                                await message.reply(embed=embed, file=file, view=view, mention_author=False)
+                            except Exception as img_err:
+                                logger.error(f"Image generation error (mention/reply): {img_err}")
+                                await message.reply(f"Sorry, I couldn't generate that image. Error: {img_err}", mention_author=True)
+                        return
+
+                    # Regular AI text response
+                    async with message.channel.typing():
+                        user_name = get_known_user_name(message.author.id)
+                        system_prompt = get_system_prompt(user_name, str(message.author.id))
+                        ai_messages = [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_question},
+                        ]
+                        try:
+                            ai_response = await make_request(ai_messages, max_tokens=800, include_sheet_data=True)
+                            if not ai_response or not ai_response.strip():
+                                await message.reply("I heard you, but couldn't think of a reply right now. Try again! 🙏", mention_author=True)
+                                return
+                            # Split if too long
+                            if len(ai_response) <= 2000:
+                                await message.reply(ai_response, mention_author=False)
+                            else:
+                                chunks = [ai_response[i:i+2000] for i in range(0, len(ai_response), 2000)]
+                                await message.reply(chunks[0], mention_author=False)
+                                for chunk in chunks[1:]:
+                                    await message.channel.send(chunk)
+                        except Exception as ai_err:
+                            logger.error(f"AI error in mention/reply handler: {ai_err}")
+                            await message.reply("Oops, I hit an error processing your message. Please try again later! 😅", mention_author=True)
+                except Exception as mention_err:
+                    logger.error(f"Error in mention/reply handler: {mention_err}", exc_info=True)
+                return  # Don't fall through to keyword triggers when the bot was mentioned/replied to
+
         # Handle keyword triggers in guild channels
         if message.guild:
             content_lower = message.content.lower().strip()
