@@ -2741,238 +2741,243 @@ class Music(commands.Cog):
             
         return player
         
+    async def _play_internal(self, interaction: Optional[discord.Interaction], ctx: Optional[commands.Context], query: str):
+        """Shared playback logic for both slash and prefix commands"""
+        # Defer or indicate typing
+        if interaction:
+            if not interaction.response.is_done():
+                await interaction.response.defer()
+            author = interaction.user
+            guild = interaction.guild
+            channel = interaction.channel
+        else:
+            async with ctx.typing():
+                pass
+            author = ctx.author
+            guild = ctx.guild
+            channel = ctx.channel
+
+        # Check if Lavalink is connected
+        if not self.check_lavalink_connected():
+            msg = (
+                "❌ **Music system is not available**\n\n"
+                "The bot couldn't connect to the Lavalink server. "
+                "Please contact the bot administrator to configure a working Lavalink server."
+            )
+            if interaction:
+                await interaction.followup.send(msg, ephemeral=True)
+            else:
+                await ctx.send(msg)
+            return
+
+        try:
+            # Get or create player
+            # For prefix commands, we need a custom implementation of get_player or similar
+            player: CustomPlayer = guild.voice_client
+            
+            if not player:
+                # Determine which voice channel to connect to
+                target_channel = None
+                
+                # First, check if user is in a voice channel
+                if author.voice and author.voice.channel:
+                    target_channel = author.voice.channel
+                else:
+                    # User is not in voice - check for persistent channel
+                    if music_state_storage:
+                        persistent_channel_id = await music_state_storage.get_persistent_channel(guild.id)
+                        if persistent_channel_id:
+                            target_channel = guild.get_channel(persistent_channel_id)
+                
+                if not target_channel:
+                    msg = "❌ Please join a voice channel first!"
+                    if interaction:
+                        await interaction.followup.send(msg, ephemeral=True)
+                    else:
+                        await ctx.send(msg)
+                    return
+
+                try:
+                    player = await target_channel.connect(cls=CustomPlayer, timeout=30.0, self_deaf=True)
+                    player.text_channel = channel
+                except Exception as e:
+                    msg = f"❌ Failed to connect to voice: {e}"
+                    if interaction:
+                        await interaction.followup.send(msg, ephemeral=True)
+                    else:
+                        await ctx.send(msg)
+                    return
+
+            # Search for tracks
+            try:
+                tracks = await wavelink.Playable.search(query)
+            except Exception as e:
+                msg = f"❌ Search failed: {e}"
+                if interaction:
+                    await interaction.followup.send(msg, ephemeral=True)
+                else:
+                    await ctx.send(msg)
+                return
+
+            if not tracks:
+                msg = "❌ No tracks found!"
+                if interaction:
+                    await interaction.followup.send(msg, ephemeral=True)
+                else:
+                    await ctx.send(msg)
+                return
+
+            # Handle tracks (simplified for this refactor)
+            if isinstance(tracks, wavelink.Playlist):
+                for track in tracks.tracks:
+                    track.extras.requester_id = author.id
+                    track.extras.requester_name = str(author)
+                    player.queue.put(track)
+                
+                msg = f"📋 Added **{len(tracks.tracks)}** tracks from playlist: **{tracks.name}**"
+                if interaction:
+                    await interaction.followup.send(msg)
+                else:
+                    await ctx.send(msg)
+                
+                if not player.playing:
+                    await self.safe_play(player, player.queue.get())
+            else:
+                track = tracks[0] if isinstance(tracks, list) else tracks
+                track.extras.requester_id = author.id
+                track.extras.requester_name = str(author)
+                
+                if player.playing:
+                    player.queue.put(track)
+                    msg = f"📝 Added to queue: **{track.title}**"
+                    if interaction:
+                        await interaction.followup.send(msg)
+                    else:
+                        await ctx.send(msg)
+                else:
+                    success = await self.safe_play(player, track)
+                    if success:
+                        embed = self.create_now_playing_embed(player)
+                        view = PlayerControlView(player)
+                        if interaction:
+                            player.now_playing_message = await interaction.followup.send(embed=embed, view=view)
+                        else:
+                            player.now_playing_message = await ctx.send(embed=embed, view=view)
+                        await player.start_progress_updates(self)
+
+        except Exception as e:
+            msg = f"❌ Error: {e}"
+            if interaction:
+                await interaction.followup.send(msg, ephemeral=True)
+            else:
+                await ctx.send(msg)
+
     @app_commands.command(name="play", description="Play a song or add it to the queue")
     @app_commands.describe(query="Song name, URL, or search query")
     async def play(self, interaction: discord.Interaction, query: str):
-        """Play music from various sources"""
-        await interaction.response.defer()
-        
-        # Check if Lavalink is connected
-        if not self.check_lavalink_connected():
-            await interaction.followup.send(
-                "❌ **Music system is not available**\n\n"
-                "The bot couldn't connect to the Lavalink server. "
-                "Please contact the bot administrator to configure a working Lavalink server.\n\n"
-                "See `MUSIC_SETUP.md` for setup instructions.",
-                ephemeral=True
-            )
-            return
-        
-        try:
-            player = await self.get_player(interaction, query)
-            if not player:
-                return
-                
-            # Search for tracks with error handling for Spotify
-            try:
-                tracks = await wavelink.Playable.search(query)
-            except wavelink.LavalinkLoadException as e:
-                # Check if it's a Spotify-related error
-                error_msg = str(e)
-                if "spotify" in query.lower() or "spotify.com" in query.lower():
-                    await interaction.followup.send(
-                        "❌ **Spotify Playlist Error**\n\n"
-                        "The Lavalink server couldn't load this Spotify playlist. This usually happens because:\n"
-                        "• Spotify plugin is not configured in Lavalink\n"
-                        "• Spotify API credentials are missing or invalid\n"
-                        "• The playlist is private or region-restricted\n\n"
-                        "**Workarounds:**\n"
-                        "1. Try searching for the songs by name instead of using the Spotify link\n"
-                        "2. Use a YouTube playlist instead\n"
-                        "3. Ask the bot administrator to configure Spotify support in Lavalink\n\n"
-                        f"Technical error: {error_msg}",
-                        ephemeral=True
-                    )
-                else:
-                    await interaction.followup.send(
-                        f"❌ **Failed to Load Track**\n\n"
-                        f"The music server encountered an error while loading this track.\n\n"
-                        f"Error: {error_msg}",
-                        ephemeral=True
-                    )
-                return
-            except Exception as e:
-                await interaction.followup.send(
-                    f"❌ **Search Error**\n\n"
-                    f"An unexpected error occurred while searching for tracks.\n\n"
-                    f"Error: {e}",
-                    ephemeral=True
-                )
-                return
-            
-            if not tracks:
-                await interaction.followup.send("❌ No tracks found!")
-                return
-                
-            # Handle playlists
-            if isinstance(tracks, wavelink.Playlist):
-                for track in tracks.tracks:
-                    # Store user ID and name instead of Member object
-                    track.extras.requester_id = interaction.user.id
-                    track.extras.requester_name = str(interaction.user)
-                    player.queue.put(track)
-                    
-                await interaction.followup.send(
-                    f"📋 Added **{len(tracks.tracks)}** tracks from playlist: **{tracks.name}**"
-                )
-                
-                # Start playing if nothing is playing
-                if not player.playing and not player.queue.is_empty:
-                    next_track = player.queue.get()
-                    await self.safe_play(player, next_track, interaction)
-                    
-            else:
-                # Handle list of tracks or single track
-                track = None
-                if isinstance(tracks, list) and len(tracks) > 0:
-                    track = tracks[0]
-                elif hasattr(tracks, '__iter__') and not isinstance(tracks, str):
-                    # It's some iterable, get first item
-                    try:
-                        track = next(iter(tracks))
-                    except StopIteration:
-                        await interaction.followup.send("❌ No tracks found!")
-                        return
-                else:
-                    # Assume it's a single track
-                    track = tracks
-                
-                if not track:
-                    await interaction.followup.send("❌ No tracks found!")
-                    return
-                
-                # Store user ID and name instead of Member object
-                track.extras.requester_id = interaction.user.id
-                track.extras.requester_name = str(interaction.user)
-                
-                # Check if player is actually playing something
-                if player.playing:
-                    # Add to queue
-                    player.queue.put(track)
-                    queue_size = player.queue.count
-                    await interaction.followup.send(
-                        f"📝 Added to queue at position **{queue_size}**: **{track.title}** by {track.author}"
-                    )
-                else:
-                    # Start playing immediately with error handling
-                    print(f"DEBUG: About to play track: {track.title}")
-                    print(f"DEBUG: Player connected: {player.connected}")
-                    print(f"DEBUG: Player channel: {player.channel}")
-                    print(f"DEBUG: Lavalink node: {player.node}")
-                    print(f"DEBUG: Node status: {player.node.status if player.node else 'No node'}")
-                    
-                    # Use safe_play to handle session errors
-                    success = await self.safe_play(player, track, interaction)
-                    
-                    if success:
-                        print(f"DEBUG: After play - Playing: {player.playing}")
-                        print(f"DEBUG: After play - Current: {player.current}")
-                        
-                        # Get the current player (might be new if reconnected)
-                        current_player = interaction.guild.voice_client
-                        if current_player:
-                            embed = self.create_now_playing_embed(current_player)
-                            view = PlayerControlView(current_player)
-                            # Store the message for future edits
-                            current_player.now_playing_message = await interaction.followup.send(embed=embed, view=view)
-                            # Start real-time progress updates
-                            await current_player.start_progress_updates(self)
-                    else:
-                        await interaction.followup.send(
-                            "❌ Failed to start playback. The Lavalink session may have expired.\n"
-                            "Please try again.",
-                            ephemeral=True
-                        )
-                    
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            await interaction.followup.send(f"❌ Error: {e}")
-            
+        """Play music (slash command)"""
+        await self._play_internal(interaction, None, query)
+
+    @commands.command(name="play", aliases=["p"])
+    async def play_prefix(self, ctx, *, query: str):
+        """Play music (prefix command)"""
+        await self._play_internal(None, ctx, query)
+
     @app_commands.command(name="pause", description="Pause the current track")
     async def pause(self, interaction: discord.Interaction):
-        """Pause playback"""
+        """Pause playback (slash command)"""
         player: CustomPlayer = interaction.guild.voice_client
-        
         if not player or not player.current:
             await interaction.response.send_message("❌ Nothing is playing!", ephemeral=True)
             return
-            
-        if player.paused:
-            await interaction.response.send_message("❌ Already paused!", ephemeral=True)
-            return
-            
         await player.pause(True)
         await interaction.response.send_message("⏸️ Paused playback")
-        
+
+    @commands.command(name="pause")
+    async def pause_prefix(self, ctx):
+        """Pause playback (prefix command)"""
+        player: CustomPlayer = ctx.guild.voice_client
+        if not player or not player.current:
+            await ctx.send("❌ Nothing is playing!")
+            return
+        await player.pause(True)
+        await ctx.send("⏸️ Paused playback")
+
     @app_commands.command(name="resume", description="Resume playback")
     async def resume(self, interaction: discord.Interaction):
-        """Resume playback"""
+        """Resume playback (slash command)"""
         player: CustomPlayer = interaction.guild.voice_client
-        
         if not player or not player.current:
             await interaction.response.send_message("❌ Nothing is playing!", ephemeral=True)
             return
-            
-        if not player.paused:
-            await interaction.response.send_message("❌ Not paused!", ephemeral=True)
-            return
-            
         await player.pause(False)
         await interaction.response.send_message("▶️ Resumed playback")
-        
-    @app_commands.command(name="skip", description="Skip the current track")
-    @app_commands.describe(amount="Number of tracks to skip (default: 1)")
-    async def skip(self, interaction: discord.Interaction, amount: int = 1):
-        """Skip tracks"""
-        try:
-            player: CustomPlayer = interaction.guild.voice_client
-            
-            if not player or not player.current:
-                await interaction.response.send_message("❌ Nothing is playing!", ephemeral=True)
-                return
-                
-            if amount < 1:
-                await interaction.response.send_message("❌ Amount must be at least 1!", ephemeral=True)
-                return
-                
-            # Skip additional tracks from queue
-            skipped = min(amount - 1, player.queue.count)
-            for _ in range(skipped):
-                if not player.queue.is_empty:
-                    player.queue.get()
-                    
-            await player.stop()
-            await interaction.response.send_message(f"⏭️ Skipped **{amount}** track(s)")
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            await interaction.response.send_message(f"❌ An error occurred: {e}", ephemeral=True)
-        
-    @app_commands.command(name="stop", description="Stop playback and disconnect")
-    async def stop(self, interaction: discord.Interaction):
-        """Stop playback"""
-        player: CustomPlayer = interaction.guild.voice_client
-        
-        if not player:
-            await interaction.response.send_message("❌ Not connected to voice!", ephemeral=True)
+
+    @commands.command(name="resume")
+    async def resume_prefix(self, ctx):
+        """Resume playback (prefix command)"""
+        player: CustomPlayer = ctx.guild.voice_client
+        if not player or not player.current:
+            await ctx.send("❌ Nothing is playing!")
             return
-        
-        # Clear voice channel status before disconnecting
-        if player.channel:
-            try:
-                await player.channel.edit(status=None)
-            except Exception as e:
-                print(f"⚠️ Could not clear voice channel status: {e}")
-        
-        # Stop progress updates
-        await player.stop_progress_updates()
-        
+        await player.pause(False)
+        await ctx.send("▶️ Resumed playback")
+
+    @app_commands.command(name="skip", description="Skip the current track")
+    async def skip(self, interaction: discord.Interaction):
+        """Skip current track (slash command)"""
+        player: CustomPlayer = interaction.guild.voice_client
+        if not player or not player.current:
+            await interaction.response.send_message("❌ Nothing is playing!", ephemeral=True)
+            return
+        await player.stop()
+        await interaction.response.send_message("⏭️ Skipped track")
+
+    @commands.command(name="skip", aliases=["s"])
+    async def skip_prefix(self, ctx):
+        """Skip current track (prefix command)"""
+        player: CustomPlayer = ctx.guild.voice_client
+        if not player or not player.current:
+            await ctx.send("❌ Nothing is playing!")
+            return
+        await player.stop()
+        await ctx.send("⏭️ Skipped track")
+
+    @app_commands.command(name="stop", description="Stop and disconnect")
+    async def stop(self, interaction: discord.Interaction):
+        """Stop and disconnect (slash command)"""
+        player: CustomPlayer = interaction.guild.voice_client
+        if not player:
+            await interaction.response.send_message("❌ Not connected!", ephemeral=True)
+            return
         player.queue.clear()
         await player.stop()
         await player.disconnect()
-        await interaction.response.send_message("⏹️ Stopped playback and disconnected")
+        await interaction.response.send_message("⏹️ Stopped and disconnected")
+
+    @commands.command(name="stop")
+    async def stop_prefix(self, ctx):
+        """Stop and disconnect (prefix command)"""
+        player: CustomPlayer = ctx.guild.voice_client
+        if not player:
+            await ctx.send("❌ Not connected!")
+            return
+        player.queue.clear()
+        await player.stop()
+        await player.disconnect()
+        await ctx.send("⏹️ Stopped and disconnected")
         
+    @commands.command(name="sync_music")
+    @commands.has_permissions(manage_guild=True)
+    async def sync_music(self, ctx):
+        """Force sync music slash commands to this server"""
+        try:
+            self.bot.tree.copy_global_to(guild=ctx.guild)
+            synced = await self.bot.tree.sync(guild=ctx.guild)
+            await ctx.send(f"✅ Successfully synced {len(synced)} music commands to this server!\nSlash commands should now be visible (you may need to restart your Discord client).")
+        except Exception as e:
+            await ctx.send(f"❌ Failed to sync: {e}")
+
     @app_commands.command(name="nowplaying", description="Show currently playing track")
     async def nowplaying(self, interaction: discord.Interaction):
         """Show now playing"""
