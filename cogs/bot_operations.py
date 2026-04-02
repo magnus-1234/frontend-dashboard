@@ -977,7 +977,7 @@ class BotOperations(commands.Cog):
                         embed.set_thumbnail(url=clock_thumbnail)
                     
                     if len(member_chunks) > 1:
-                        embed.set_footer(text="Whiteout Survival | Magnus")}")
+                        embed.set_footer(text="Whiteout Survival | Magnus")
                     
                     embeds.append(embed)
                 
@@ -1525,7 +1525,7 @@ class BotOperations(commands.Cog):
                     )
                 
                 if len(records) > 25:
-                    embed.set_footer(text="Whiteout Survival | Magnus")} records")
+                    embed.set_footer(text="Whiteout Survival | Magnus")
                 
                 await interaction.response.send_message(embed=embed, ephemeral=True)
                 return
@@ -1645,7 +1645,7 @@ class BotOperations(commands.Cog):
                                             description=f"Adding **{len(fid_list)}** member(s) to **{self.record_name}**...\n\n```\nPlease wait while we process your request.\n```",
                                             color=0x5865F2
                                         )
-                                        processing_embed.set_footer(text="Whiteout Survival | Magnus")} FIDs...")
+                                        processing_embed.set_footer(text="Whiteout Survival | Magnus")
                                         
                                         await modal_interaction.response.send_message(embed=processing_embed, ephemeral=True)
                                         
@@ -1699,7 +1699,7 @@ class BotOperations(commands.Cog):
                                                     description=f"**{self.record_name}**\n\n```\n[{progress_bar}] {int((idx/len(fid_list))*100)}%\n```\n✅ Success: {success_count} | ❌ Failed: {fail_count}",
                                                     color=0x5865F2
                                                 )
-                                                progress_embed.set_footer(text="Whiteout Survival | Magnus")} FIDs...")
+                                                progress_embed.set_footer(text="Whiteout Survival | Magnus")
                                                 
                                                 await modal_interaction.edit_original_response(embed=progress_embed)
                                         
@@ -2107,7 +2107,7 @@ class BotOperations(commands.Cog):
                                             description=f"Removing **{len(fid_list)}** member(s) from **{self.record_name}**...\n\n```\nPlease wait while we process your request.\n```",
                                             color=0x5865F2
                                         )
-                                        processing_embed.set_footer(text="Whiteout Survival | Magnus")} FIDs...")
+                                        processing_embed.set_footer(text="Whiteout Survival | Magnus")
                                         
                                         await modal_interaction.response.send_message(embed=processing_embed, ephemeral=True)
                                         
@@ -2140,7 +2140,7 @@ class BotOperations(commands.Cog):
                                                     description=f"**{self.record_name}**\n\n```\n[{progress_bar}] {int((idx/len(fid_list))*100)}%\n```\n✅ Success: {success_count} | ❌ Failed: {fail_count}",
                                                     color=0x5865F2
                                                 )
-                                                progress_embed.set_footer(text="Whiteout Survival | Magnus")} FIDs...")
+                                                progress_embed.set_footer(text="Whiteout Survival | Magnus")
                                                 
                                                 await modal_interaction.edit_original_response(embed=progress_embed)
                                         
@@ -2161,7 +2161,7 @@ class BotOperations(commands.Cog):
                                             )
                                         
                                         if len(results) > 20:
-                                            result_embed.set_footer(text="Whiteout Survival | Magnus")} results")
+                                            result_embed.set_footer(text="Whiteout Survival | Magnus")
                                         
                                         await modal_interaction.edit_original_response(embed=result_embed)
                                 
@@ -2214,7 +2214,7 @@ class BotOperations(commands.Cog):
                                     description=f"Removing **{len(fid_list)}** member(s) from **{self.record_name}**...\n\n```\nPlease wait while we process your request.\n```",
                                     color=0x5865F2
                                 )
-                                processing_embed.set_footer(text="Whiteout Survival | Magnus")} FIDs...")
+                                processing_embed.set_footer(text="Whiteout Survival | Magnus")
                                 
                                 await modal_interaction.response.send_message(embed=processing_embed, ephemeral=True)
                                 
@@ -2247,7 +2247,7 @@ class BotOperations(commands.Cog):
                                             description=f"**{self.record_name}**\n\n```\n[{progress_bar}] {int((idx/len(fid_list))*100)}%\n```\n✅ Success: {success_count} | ❌ Failed: {fail_count}",
                                             color=0x5865F2
                                         )
-                                        progress_embed.set_footer(text="Whiteout Survival | Magnus")} FIDs...")
+                                        progress_embed.set_footer(text="Whiteout Survival | Magnus")
                                         
                                         await modal_interaction.edit_original_response(embed=progress_embed)
                                 
@@ -2268,7 +2268,7 @@ class BotOperations(commands.Cog):
                                     )
                                 
                                 if len(results) > 20:
-                                    result_embed.set_footer(text="Whiteout Survival | Magnus")} results")
+                                    result_embed.set_footer(text="Whiteout Survival | Magnus")
                                 
                                 await modal_interaction.edit_original_response(embed=result_embed)
                         
@@ -3587,7 +3587,7 @@ class BotOperations(commands.Cog):
                             description=f"{'➕ Adding' if True else '➖ Removing'} **{len(valid_fids)}** member(s)...\n\n```\nPlease wait while we process your request.\n```",
                             color=0x5865F2
                         )
-                        processing_embed.set_footer(text="Whiteout Survival | Magnus")} FIDs...")
+                        processing_embed.set_footer(text="Whiteout Survival | Magnus")
                         
                         await modal_interaction.response.send_message(embed=processing_embed, ephemeral=True)
                         
@@ -3636,7 +3636,7 @@ class BotOperations(commands.Cog):
                                     description=f"Processing **{len(valid_fids)}** member(s)...\n\n```ansi\n\u001b[2;32m✓ Success: {len(success_list)}\n\u001b[2;31m✗ Failed:  {len(failed_list)}\n\u001b[2;37m⟳ Pending: {len(valid_fids) - idx}\u001b[0m\n```",
                                     color=0x5865F2
                                 )
-                                progress_embed.set_footer(text="Whiteout Survival | Magnus")} FIDs...")
+                                progress_embed.set_footer(text="Whiteout Survival | Magnus")
                                 
                                 try:
                                     await modal_interaction.edit_original_response(embed=progress_embed)
@@ -3750,7 +3750,7 @@ class BotOperations(commands.Cog):
                             description=f"➖ Removing **{len(valid_fids)}** member(s)...\n\n```\nPlease wait while we process your request.\n```",
                             color=0x5865F2
                         )
-                        processing_embed.set_footer(text="Whiteout Survival | Magnus")} FIDs...")
+                        processing_embed.set_footer(text="Whiteout Survival | Magnus")
                         
                         await modal_interaction.response.send_message(embed=processing_embed, ephemeral=True)
                         
@@ -3784,7 +3784,7 @@ class BotOperations(commands.Cog):
                                     description=f"Processing **{len(valid_fids)}** member(s)...\n\n```ansi\n\u001b[2;32m✓ Removed: {len(success_list)}\n\u001b[2;31m✗ Failed:  {len(failed_list)}\n\u001b[2;37m⟳ Pending: {len(valid_fids) - idx}\u001b[0m\n```",
                                     color=0x5865F2
                                 )
-                                progress_embed.set_footer(text="Whiteout Survival | Magnus")} FIDs...")
+                                progress_embed.set_footer(text="Whiteout Survival | Magnus")
                                 
                                 try:
                                     await modal_interaction.edit_original_response(embed=progress_embed)

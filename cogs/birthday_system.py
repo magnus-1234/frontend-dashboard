@@ -957,7 +957,8 @@ class BirthdaySystem(commands.Cog):
                 # For multiple birthdays, use the birthday cake GIF
                 embed.set_thumbnail(url="https://i.imgur.com/9KWzH9s.gif")
             
-            embed.set_footer(text="Whiteout Survival | Magnus").strftime('%B %d')}",
+            embed.set_footer(
+                text="Whiteout Survival | Magnus",
                 icon_url="https://cdn.discordapp.com/attachments/1435569370389807144/1436745053442805830/unnamed_5.png?ex=6933a85a&is=693256da&hm=75ec361677f174173e526863fdaa30d9b3e6983f9f1ad45dd1a9601aad6c0021"
             )
             

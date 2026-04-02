@@ -1246,9 +1246,7 @@ class Alliance(commands.Cog):
                                 
                                 if self.total_pages > 1:
                                     embed.set_footer(text="Whiteout Survival | Magnus")
-                                else:
-                                    embed.set_footer(text="Whiteout Survival | Magnus")
-                                
+                                    embed.set_footer(text="Whiteout Survival | Magnus")                                
                                 return embed
                             
                             async def server_selected(self, select_interaction: discord.Interaction):
@@ -3305,8 +3303,7 @@ class Alliance(commands.Cog):
                         description=description,
                         color=discord.Color.gold()
                     )
-                    embed.set_footer(text="Whiteout Survival | Magnus")
-                    
+                    embed.set_footer(text="Whiteout Survival | Magnus")                    
                     # Set embed footer with bot branding
                     self.cog._set_embed_footer(embed)
                     

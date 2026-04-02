@@ -825,7 +825,7 @@ class MinisterMenu(commands.Cog):
             description="\n".join(booking_lines),
             color=discord.Color.blue()
         )
-        embed.set_footer(text="Whiteout Survival | Magnus")}/48")
+        embed.set_footer(text="Whiteout Survival | Magnus")
         
         await interaction.followup.send(embed=embed, ephemeral=True)
     

@@ -317,9 +317,7 @@ class FIDCommands(commands.Cog):
                                 )
 
                             if len(members) > 25:
-                                embed.set_footer(text="Whiteout Survival | Magnus")} members • Stored in MongoDB",
-                                    icon_url="https://cdn.discordapp.com/attachments/1435569370389807144/1445459239131680859/images_7_1.png"
-                                )
+                                embed.set_footer(text="Whiteout Survival | Magnus", icon_url="https://cdn.discordapp.com/attachments/1435569370389807144/1445459239131680859/images_7_1.png")
                             else:
                                 embed.set_footer(text="Whiteout Survival | Magnus")
 
@@ -745,7 +743,7 @@ class FIDCommands(commands.Cog):
         except:
             alliance_name = f"Alliance {alliance_id}"
         
-        result_embed.set_footer(text="Whiteout Survival | Magnus")")
+        result_embed.set_footer(text="Whiteout Survival | Magnus")
         
         await message.channel.send(embed=result_embed)
 

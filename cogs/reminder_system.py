@@ -1573,7 +1573,7 @@ class ReminderSystem(commands.Cog):
             )
         
         if len(user_reminders) > 10:
-            embed.set_footer(text="Whiteout Survival | Magnus")} reminders. Use /reminderdashboard to manage them.")
+            embed.set_footer(text="Whiteout Survival | Magnus")
         else:
             embed.set_footer(text="Whiteout Survival | Magnus")
         
@@ -1695,7 +1695,7 @@ class ReminderSystem(commands.Cog):
                 )
 
             if len(all_reminders) > 15:
-                embed.set_footer(text="Whiteout Survival | Magnus")} reminders. Use /reminderdashboard to manage them.")
+                embed.set_footer(text="Whiteout Survival | Magnus")
             else:
                 embed.set_footer(text="Whiteout Survival | Magnus")
 

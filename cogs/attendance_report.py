@@ -978,9 +978,9 @@ class AttendanceReport(commands.Cog):
             )
             
             if session_id:
-                embed.set_footer(text="Whiteout Survival | Magnus")")
+                embed.set_footer(text="Whiteout Survival | Magnus")
             else:
-                embed.set_footer(text="Whiteout Survival | Magnus")")
+                embed.set_footer(text="Whiteout Survival | Magnus")
             
             # Create view with back and export buttons
             view = discord.ui.View(timeout=7200)

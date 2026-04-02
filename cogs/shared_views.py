@@ -1464,7 +1464,7 @@ class BirthdayDashboardView(discord.ui.View):
                     embed.add_field(name=f"{item['user'].display_name}", value=f"📅 {month_name} {item['day']} ({days_text})", inline=False)
                 
                 if len(upcoming) > 10:
-                    embed.set_footer(text="Whiteout Survival | Magnus")} upcoming birthdays")
+                    embed.set_footer(text="Whiteout Survival | Magnus")
                 
                 await button_interaction.followup.send(embed=embed, ephemeral=True)
             else:

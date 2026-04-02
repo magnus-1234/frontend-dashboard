@@ -3294,7 +3294,6 @@ class ManageGiftCode(commands.Cog):
                         ephemeral=True
                     )
                     return
-                
                 # Build embed with statistics
                 embed = discord.Embed(
                     title="📊 Gift Code Usage History",
@@ -3326,9 +3325,9 @@ class ManageGiftCode(commands.Cog):
                     )
                 
                 if len(stats) > 15:
-                    embed.set_footer(text="Whiteout Survival | Magnus")} codes • Sorted by most used")
+                    embed.set_footer(text="Whiteout Survival | Magnus")
                 else:
-                    embed.set_footer(text="Whiteout Survival | Magnus")} codes tracked")
+                    embed.set_footer(text="Whiteout Survival | Magnus")
                 
                 await interaction.response.send_message(embed=embed, ephemeral=True)
                 return
@@ -3667,7 +3666,7 @@ class ManageGiftCode(commands.Cog):
                         inline=False
                     )
                     if len(new_codes) > 10:
-                        embed.set_footer(text="Whiteout Survival | Magnus")} new codes")
+                        embed.set_footer(text="Whiteout Survival | Magnus")
                 
                 await interaction.followup.send(embed=embed, ephemeral=True)
                 
@@ -4113,7 +4112,7 @@ class ManageGiftCode(commands.Cog):
                             result_embed.add_field(name="📋 Details", value=results_text, inline=False)
                         
                         if len(results) > 20:
-                            result_embed.set_footer(text="Whiteout Survival | Magnus")} results")
+                            result_embed.set_footer(text="Whiteout Survival | Magnus")
                         
                         await modal_interaction.edit_original_response(embed=result_embed)
                     
@@ -4279,7 +4278,7 @@ class ManageGiftCode(commands.Cog):
                             result_embed.add_field(name="📋 Details", value=results_text, inline=False)
                         
                         if len(results) > 20:
-                            result_embed.set_footer(text="Whiteout Survival | Magnus")} results")
+                            result_embed.set_footer(text="Whiteout Survival | Magnus")
                         
                         await modal_interaction.edit_original_response(embed=result_embed)
                         
@@ -4798,7 +4797,7 @@ class ManageGiftCode(commands.Cog):
                             result_embed.add_field(name="📋 Details", value=results_text, inline=False)
                         
                         if len(results) > 20:
-                            result_embed.set_footer(text="Whiteout Survival | Magnus")} results")
+                            result_embed.set_footer(text="Whiteout Survival | Magnus")
                         
                         await remove_interaction.edit_original_response(embed=result_embed)
 
@@ -5227,7 +5226,7 @@ class ManageGiftCode(commands.Cog):
                                         embed.add_field(name="📋 Details", value=results_text, inline=False)
                                     
                                     if len(self.results) > self.items_per_page:
-                                        embed.set_footer(text="Whiteout Survival | Magnus")} • Total: {len(self.results)} members")
+                                        embed.set_footer(text="Whiteout Survival | Magnus")
                                     
                                     return embed
                                 

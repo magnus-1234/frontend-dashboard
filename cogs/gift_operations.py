@@ -2535,9 +2535,9 @@ class GiftOperations(commands.Cog):
             embed.add_field(name=name, value=value, inline=False)
         
         if len(active_codes) > 10:
-            embed.set_footer(text="Whiteout Survival | Magnus") - 10} more codes available.")
+            embed.set_footer(text="Whiteout Survival | Magnus")
         else:
-            embed.set_footer(text="Whiteout Survival | Magnus")} active code{'s' if len(active_codes) != 1 else ''}.")
+            embed.set_footer(text="Whiteout Survival | Magnus")
 
         # Step 7: Create view with buttons
         from giftcode_poster import GiftCodeView

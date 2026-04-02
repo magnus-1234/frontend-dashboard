@@ -1989,9 +1989,9 @@ class FormatSelectionView(discord.ui.View):
             )
         
         if len(admin_guilds) > 25:
-            embed.set_footer(text="Whiteout Survival | Magnus")} servers")
+            embed.set_footer(text="Whiteout Survival | Magnus")
         else:
-            embed.set_footer(text="Whiteout Survival | Magnus")} server(s)")
+            embed.set_footer(text="Whiteout Survival | Magnus")
         
         await interaction.followup.send(embed=embed, ephemeral=True)
     
