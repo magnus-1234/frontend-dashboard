@@ -275,7 +275,7 @@ class TTS(commands.Cog):
                 description=f"**Current voice:** {current}\n\n{voice_list}",
                 color=discord.Color.blue()
             )
-            embed.set_footer(text="Use /tts_voice <name> to change voice")
+            embed.set_footer(text="Whiteout Survival | Magnus")
             await interaction.response.send_message(embed=embed, ephemeral=True)
         else:
             # Set voice

@@ -1,49 +1,50 @@
-// PM2 Ecosystem Configuration
-// Usage (Oracle VM):
+// PM2 Ecosystem Configuration — Oracle VM
+// Usage:
 //   pm2 start ecosystem.config.js
 //   pm2 save
 //   pm2 startup   # auto-start on VM reboot
 //
-// Key settings that prevent the outage restart loop:
-//   max_restarts  – stop respawning after 5 crashes (prevents infinite crash loop)
-//   restart_delay – wait 30 s before each restart (avoids hammering Discord gateway)
-//   kill_timeout  – give the old process 15 s to die before PM2 starts the new one
-//                   (prevents the "ExtensionAlreadyLoaded" duplicate-cog errors)
-//   watch: false  – never restart just because a file changed
+// Key settings preventing the outage restart loop:
+//   max_restarts  — stop respawning after 5 crashes (prevents infinite crash loop)
+//   restart_delay — 30 s cool-down between restarts
+//   kill_timeout  — 15 s for graceful shutdown before SIGKILL
+//                   (prevents "ExtensionAlreadyLoaded" duplicate-cog errors)
+//   watch: false  — never restart on file changes
 
 module.exports = {
   apps: [
     {
       name: "discordbot",
       script: "app.py",
-      interpreter: "python3",   // change to "python" on Windows
-      cwd: "/home/opc/app/bot/DISCORD BOT",  // Oracle VM path
+      interpreter: "python3",      // Windows: change to "python"
+      cwd: "/home/ubuntu/bot",    // Oracle VM root path (where this app.py lives)
 
       // ── Restart policy ──────────────────────────────────────────────────
-      max_restarts: 5,           // hard-stop loop after 5 consecutive crashes
-      restart_delay: 30000,     // 30 s cool-down between restarts
-      min_uptime: "60s",        // a run shorter than 60 s counts as a crash
-      kill_timeout: 15000,      // 15 s for graceful shutdown before SIGKILL
+      max_restarts: 5,             // hard-stop loop after 5 consecutive crashes
+      restart_delay: 30000,       // 30 s cool-down between restarts
+      min_uptime: "60s",          // runs < 60 s count as crashes
+      kill_timeout: 15000,        // 15 s graceful shutdown before SIGKILL
+      max_memory_restart: "300M", // restart gracefully if memory exceeds 300MB
 
       // ── Process behaviour ───────────────────────────────────────────────
-      watch: false,              // don't restart on file changes
-      autorestart: true,         // do restart on actual crashes (exit code ≠ 0)
+      watch: false,
+      autorestart: true,
 
       // ── Environment variables ───────────────────────────────────────────
       env: {
-        // Skips pip install on every start → removes 1–3 min startup gap.
-        // Only set to false when you explicitly upgrade requirements.txt.
+        // Skip pip install on every start — removes the 1-3 min startup gap.
+        // Set to false only after updating requirements.txt.
         SKIP_INSTALL: "true",
 
-        // Oracle VM: 8080 is normally fine; Render uses PORT env var.
+        // Oracle VM: 8080 is fine (no Windows firewall restriction)
         PORT: "8080",
 
-        PYTHONUNBUFFERED: "1",   // ensures logs appear immediately
+        PYTHONUNBUFFERED: "1",
       },
 
       // ── Log files ───────────────────────────────────────────────────────
-      out_file: "/home/opc/app/bot/discordbot-out.log",
-      error_file: "/home/opc/app/bot/discordbot-error.log",
+      out_file: "/home/ubuntu/bot/discordbot-out.log",
+      error_file: "/home/ubuntu/bot/discordbot-error.log",
       log_date_format: "YYYY-MM-DD HH:mm:ss",
       merge_logs: false,
     },

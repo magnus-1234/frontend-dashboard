@@ -3075,7 +3075,7 @@ class ManageGiftCode(commands.Cog):
                 ),
                 color=0xFF5733
             )
-            embed.set_footer(text=f"Checked by {interaction.user.name}", icon_url=interaction.user.display_avatar.url)
+            embed.set_footer(text="Whiteout Survival | Magnus")
             
             view = discord.ui.View()
             view.add_item(discord.ui.Button(label="Trigger For All Enabled Servers", emoji="▶️", style=discord.ButtonStyle.danger, custom_id=f"auto_redeem_manual_trigger_{code}"))
@@ -3152,10 +3152,7 @@ class ManageGiftCode(commands.Cog):
                 ),
                 color=0x2B2D31
             )
-            embed.set_footer(
-                text=f"{interaction.guild.name} x Magnus🚀",
-                icon_url="https://cdn.discordapp.com/attachments/1435569370389807144/1436745053442805830/unnamed_5.png"
-            )
+            embed.set_footer(text="Whiteout Survival | Magnus")
             
             view = discord.ui.View()
             view.add_item(discord.ui.Button(
@@ -3260,7 +3257,7 @@ class ManageGiftCode(commands.Cog):
                 )
             
             if len(codes) >= 25:
-                embed.set_footer(text="Showing 25 most recent codes")
+                embed.set_footer(text="Whiteout Survival | Magnus")
             
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
@@ -3329,9 +3326,9 @@ class ManageGiftCode(commands.Cog):
                     )
                 
                 if len(stats) > 15:
-                    embed.set_footer(text=f"Showing top 15 of {len(stats)} codes • Sorted by most used")
+                    embed.set_footer(text="Whiteout Survival | Magnus")} codes • Sorted by most used")
                 else:
-                    embed.set_footer(text=f"Total: {len(stats)} codes tracked")
+                    embed.set_footer(text="Whiteout Survival | Magnus")} codes tracked")
                 
                 await interaction.response.send_message(embed=embed, ephemeral=True)
                 return
@@ -3616,7 +3613,7 @@ class ManageGiftCode(commands.Cog):
                 )
             
             if len(codes) >= 25:
-                embed.set_footer(text="Showing 25 most recent codes")
+                embed.set_footer(text="Whiteout Survival | Magnus")
             
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
@@ -3670,7 +3667,7 @@ class ManageGiftCode(commands.Cog):
                         inline=False
                     )
                     if len(new_codes) > 10:
-                        embed.set_footer(text=f"Showing 10 of {len(new_codes)} new codes")
+                        embed.set_footer(text="Whiteout Survival | Magnus")} new codes")
                 
                 await interaction.followup.send(embed=embed, ephemeral=True)
                 
@@ -3712,10 +3709,7 @@ class ManageGiftCode(commands.Cog):
                 ),
                 color=0x2B2D31
             )
-            embed.set_footer(
-                text=f"{interaction.guild.name} x Magnus🚀",
-                icon_url="https://cdn.discordapp.com/attachments/1435569370389807144/1436745053442805830/unnamed_5.png"
-            )
+            embed.set_footer(text="Whiteout Survival | Magnus")
             
             view = discord.ui.View()
             view.add_item(discord.ui.Button(
@@ -3875,7 +3869,7 @@ class ManageGiftCode(commands.Cog):
                             ),
                             color=0xFF5733
                         )
-                        embed.set_footer(text=f"Triggered by {select_interaction.user.name}", icon_url=select_interaction.user.display_avatar.url)
+                        embed.set_footer(text="Whiteout Survival | Magnus")
                         
                         view = discord.ui.View()
                         
@@ -3976,10 +3970,7 @@ class ManageGiftCode(commands.Cog):
                 ),
                 color=0x2B2D31
             )
-            embed.set_footer(
-                text=f"{interaction.guild.name} x Magnus🚀",
-                icon_url="https://cdn.discordapp.com/attachments/1435569370389807144/1436745053442805830/unnamed_5.png"
-            )
+            embed.set_footer(text="Whiteout Survival | Magnus")
             
             view = discord.ui.View()
             view.add_item(discord.ui.Button(
@@ -4122,7 +4113,7 @@ class ManageGiftCode(commands.Cog):
                             result_embed.add_field(name="📋 Details", value=results_text, inline=False)
                         
                         if len(results) > 20:
-                            result_embed.set_footer(text=f"Showing 20 of {len(results)} results")
+                            result_embed.set_footer(text="Whiteout Survival | Magnus")} results")
                         
                         await modal_interaction.edit_original_response(embed=result_embed)
                     
@@ -4173,10 +4164,7 @@ class ManageGiftCode(commands.Cog):
                 ),
                 color=0x2B2D31
             )
-            embed.set_footer(
-                text=f"{interaction.guild.name} x Magnus🚀",
-                icon_url="https://cdn.discordapp.com/attachments/1435569370389807144/1436745053442805830/unnamed_5.png"
-            )
+            embed.set_footer(text="Whiteout Survival | Magnus")
             
             view = discord.ui.View()
             view.add_item(discord.ui.Button(
@@ -4291,7 +4279,7 @@ class ManageGiftCode(commands.Cog):
                             result_embed.add_field(name="📋 Details", value=results_text, inline=False)
                         
                         if len(results) > 20:
-                            result_embed.set_footer(text=f"Showing 20 of {len(results)} results")
+                            result_embed.set_footer(text="Whiteout Survival | Magnus")} results")
                         
                         await modal_interaction.edit_original_response(embed=result_embed)
                         
@@ -4538,10 +4526,7 @@ class ManageGiftCode(commands.Cog):
                 ),
                 color=0x57F287 if enabled else 0xED4245
             )
-            embed.set_footer(
-                text=f"{interaction.guild.name} x Magnus🚀",
-                icon_url="https://cdn.discordapp.com/attachments/1435569370389807144/1436745053442805830/unnamed_5.png"
-            )
+            embed.set_footer(text="Whiteout Survival | Magnus")
             
             view = discord.ui.View()
             
@@ -4813,7 +4798,7 @@ class ManageGiftCode(commands.Cog):
                             result_embed.add_field(name="📋 Details", value=results_text, inline=False)
                         
                         if len(results) > 20:
-                            result_embed.set_footer(text=f"Showing 20 of {len(results)} results")
+                            result_embed.set_footer(text="Whiteout Survival | Magnus")} results")
                         
                         await remove_interaction.edit_original_response(embed=result_embed)
 
@@ -5242,7 +5227,7 @@ class ManageGiftCode(commands.Cog):
                                         embed.add_field(name="📋 Details", value=results_text, inline=False)
                                     
                                     if len(self.results) > self.items_per_page:
-                                        embed.set_footer(text=f"Page {self.current_page + 1}/{self.get_total_pages()} • Total: {len(self.results)} members")
+                                        embed.set_footer(text="Whiteout Survival | Magnus")} • Total: {len(self.results)} members")
                                     
                                     return embed
                                 
@@ -5516,7 +5501,7 @@ class ManageGiftCode(commands.Cog):
                                 ),
                                 color=0x57F287
                             )
-                            embed.set_footer(text=f"Configured by {select_interaction.user.name}")
+                            embed.set_footer(text="Whiteout Survival | Magnus")
                             
                             await select_interaction.response.edit_message(embed=embed, view=None)
                         except Exception as e:
@@ -5678,7 +5663,7 @@ class ManageGiftCode(commands.Cog):
                                 ),
                                 color=0x57F287
                             )
-                            embed.set_footer(text=f"Updated by {select_interaction.user.name}")
+                            embed.set_footer(text="Whiteout Survival | Magnus")
                             
                             await select_interaction.response.edit_message(embed=embed, view=None)
                         except Exception as e:
@@ -5781,7 +5766,7 @@ class ManageGiftCode(commands.Cog):
                 ),
                 color=0x57F287
             )
-            embed.set_footer(text=f"Enabled by {interaction.user.name}")
+            embed.set_footer(text="Whiteout Survival | Magnus")
             
             await self._safe_edit_message(interaction, embed=embed, view=None)
             return
@@ -5851,7 +5836,7 @@ class ManageGiftCode(commands.Cog):
                 ),
                 color=0xED4245
             )
-            embed.set_footer(text=f"Disabled by {interaction.user.name}")
+            embed.set_footer(text="Whiteout Survival | Magnus")
             
             await self._safe_edit_message(interaction, embed=embed, view=None)
             return
@@ -6082,10 +6067,7 @@ class ManageGiftCode(commands.Cog):
                                     ),
                                     color=0x57F287
                                 )
-                                embed.set_footer(
-                                    text=f"Deep Reset by {select_interaction.user.name}",
-                                    icon_url=select_interaction.user.display_avatar.url
-                                )
+                                embed.set_footer(text="Whiteout Survival | Magnus")
                                 await select_interaction.followup.send(embed=embed, ephemeral=True)
                             else:
                                 await select_interaction.followup.send(
@@ -6118,10 +6100,7 @@ class ManageGiftCode(commands.Cog):
                     ),
                     color=0x5865F2
                 )
-                embed.set_footer(
-                    text=f"{interaction.guild.name} • Magnus🚀",
-                    icon_url="https://cdn.discordapp.com/attachments/1435569370389807144/1436745053442805830/unnamed_5.png"
-                )
+                embed.set_footer(text="Whiteout Survival | Magnus")
                 
                 await interaction.followup.send(embed=embed, view=view, ephemeral=True)
                 
@@ -6294,10 +6273,7 @@ class ManageGiftCode(commands.Cog):
                                                 ),
                                             color=0x57F287
                                         )
-                                        embed.set_footer(
-                                            text=f"Deleted by {btn_interaction.user.name}",
-                                            icon_url=btn_interaction.user.display_avatar.url
-                                        )
+                                        embed.set_footer(text="Whiteout Survival | Magnus")
                                         await btn_interaction.followup.send(embed=embed, ephemeral=True)
                                     else:
                                         await btn_interaction.followup.send(
@@ -6352,10 +6328,7 @@ class ManageGiftCode(commands.Cog):
                     ),
                     color=0xED4245
                 )
-                embed.set_footer(
-                    text=f"{interaction.guild.name} • Magnus🚀",
-                    icon_url="https://cdn.discordapp.com/attachments/1435569370389807144/1436745053442805830/unnamed_5.png"
-                )
+                embed.set_footer(text="Whiteout Survival | Magnus")
                 
                 await interaction.followup.send(embed=embed, view=view, ephemeral=True)
                 
@@ -6493,9 +6466,7 @@ class ManageGiftCode(commands.Cog):
                         if avatar and str(avatar).startswith('http'):
                             embed.set_thumbnail(url=avatar)
                         
-                        embed.set_footer(
-                            text="Whiteout Survival | Magnus"
-                        )
+                        embed.set_footer(text="Whiteout Survival | Magnus")
                         
                         sent_msg = await message.reply(embed=embed)
                         self.logger.info(f"✅ Successfully auto-added {player_data['nickname']} ({fid}) from channel in guild {message.guild.id}")

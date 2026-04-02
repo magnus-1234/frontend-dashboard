@@ -54,7 +54,6 @@ class RemoteAccess(commands.Cog):
                         "• ✏️ Edit existing channels\n"
                         "• 🗑️ Delete channels\n"
                         "• 📨 Send messages to any channel\n"
-                        "• 🎵 Play music remotely\n"
                         "• 🛡️ Start alliance monitoring\n"
                         "• 🔒 Manage permissions\n\n"
                         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -63,10 +62,7 @@ class RemoteAccess(commands.Cog):
                     color=0x00D9FF
                 )
                 
-                embed.set_footer(
-                    text=f"Remote Access • Requested by {interaction.user.display_name}",
-                    icon_url=interaction.user.display_avatar.url
-                )
+                embed.set_footer(text="Whiteout Survival | Magnus")
 
                 # Create server selection dropdown
                 if len(guilds) <= 25:
@@ -163,10 +159,7 @@ class RemoteAccess(commands.Cog):
             if guild.icon:
                 embed.set_thumbnail(url=guild.icon.url)
             
-            embed.set_footer(
-                text=f"Server ID: {guild.id}",
-                icon_url=interaction.user.display_avatar.url
-            )
+            embed.set_footer(text="Whiteout Survival | Magnus")
 
             view = discord.ui.View(timeout=300)
             
@@ -239,14 +232,7 @@ class RemoteAccess(commands.Cog):
             ))
             
             
-            # Play Music button (new feature)
-            view.add_item(discord.ui.Button(
-                label="Play Music",
-                emoji="🎵",
-                style=discord.ButtonStyle.success,
-                custom_id=f"remote_play_music_{guild.id}",
-                row=2
-            ))
+
             
             # Remote Alliance Monitor button
             view.add_item(discord.ui.Button(
@@ -304,8 +290,7 @@ class RemoteAccess(commands.Cog):
                         item.callback = lambda i, g=guild: self.send_message(i, g)
                     elif item.custom_id.startswith("remote_delete_message_"):
                         item.callback = lambda i, g=guild: self.delete_message_by_id(i, g)
-                    elif item.custom_id.startswith("remote_play_music_"):
-                        item.callback = lambda i, g=guild: self.play_music(i, g)
+
                     elif item.custom_id.startswith("remote_alliance_monitor_"):
                         item.callback = lambda i, g=guild: self.start_alliance_monitor(i, g)
                     elif item.custom_id.startswith("remote_stop_alliance_monitor_"):
@@ -385,7 +370,7 @@ class RemoteAccess(commands.Cog):
                             inline=False
                         )
             
-            embed.set_footer(text=f"Server ID: {guild.id}")
+            embed.set_footer(text="Whiteout Survival | Magnus")
             
             # Back button
             view = discord.ui.View(timeout=300)
@@ -1027,7 +1012,7 @@ class RemoteAccess(commands.Cog):
                             )
                             
                             if self.footer_text.value:
-                                message_embed.set_footer(text=self.footer_text.value)
+                                message_embed.set_footer(text="Whiteout Survival | Magnus")
                             
                             # Send the embed
                             sent_message = await channel.send(embed=message_embed)
@@ -1115,10 +1100,7 @@ class RemoteAccess(commands.Cog):
                                 color=0xED4245
                             )
                             
-                            announcement_embed.set_footer(
-                                text=f"Sent by {modal_int.user.display_name}",
-                                icon_url=modal_int.user.display_avatar.url
-                            )
+                            announcement_embed.set_footer(text="Whiteout Survival | Magnus")
                             
                             # Prepare mention
                             mention_text = ""
@@ -1203,264 +1185,6 @@ class RemoteAccess(commands.Cog):
             traceback.print_exc()
             await interaction.response.send_message(
                 "❌ An error occurred while loading message options.",
-                ephemeral=True
-            )
-
-
-    async def play_music(self, interaction: discord.Interaction, guild: discord.Guild):
-        """Play music in a voice channel on the selected server"""
-        try:
-            # Get the music cog
-            music_cog = self.bot.get_cog('Music')
-            
-            if not music_cog:
-                await interaction.response.send_message(
-                    "❌ Music system is not loaded.",
-                    ephemeral=True
-                )
-                return
-            
-            # Get all voice channels in the guild
-            voice_channels = guild.voice_channels
-            
-            if not voice_channels:
-                await interaction.response.send_message(
-                    "❌ No voice channels found in this server.",
-                    ephemeral=True
-                )
-                return
-            
-            # Check bot permissions
-            bot_member = guild.get_member(self.bot.user.id)
-            accessible_channels = [
-                vc for vc in voice_channels
-                if vc.permissions_for(bot_member).connect and vc.permissions_for(bot_member).speak
-            ]
-            
-            if not accessible_channels:
-                await interaction.response.send_message(
-                    "❌ Bot doesn't have permission to connect or speak in any voice channels.",
-                    ephemeral=True
-                )
-                return
-            
-            # Create voice channel selection dropdown
-            options = [
-                discord.SelectOption(
-                    label=f"{vc.name[:90]}",
-                    value=str(vc.id),
-                    description=f"Members: {len(vc.members)} • Category: {vc.category.name if vc.category else 'None'}",
-                    emoji="🔊"
-                )
-                for vc in sorted(accessible_channels, key=lambda c: c.position)[:25]
-            ]
-            
-            select = discord.ui.Select(
-                placeholder="Select a voice channel to play music...",
-                options=options,
-                custom_id="select_voice_channel_for_music"
-            )
-            
-            async def voice_channel_selected(select_interaction: discord.Interaction):
-                channel_id = int(select_interaction.data["values"][0])
-                voice_channel = guild.get_channel(channel_id)
-                
-                if not voice_channel:
-                    await select_interaction.response.send_message(
-                        "❌ Voice channel not found.",
-                        ephemeral=True
-                    )
-                    return
-                
-                # Show song search modal
-                from discord.ui import Modal, TextInput
-                
-                class SongSearchModal(Modal, title=f"Play in {voice_channel.name}"):
-                    song_query = TextInput(
-                        label="Song Name or URL",
-                        placeholder="Enter song name, artist, or YouTube/Spotify URL...",
-                        required=True,
-                        max_length=500,
-                        style=discord.TextStyle.paragraph
-                    )
-                    
-                    def __init__(self, parent_cog, target_voice_channel, target_guild):
-                        super().__init__()
-                        self.parent_cog = parent_cog
-                        self.voice_channel = target_voice_channel
-                        self.guild = target_guild
-                    
-                    async def on_submit(self, modal_int: discord.Interaction):
-                        try:
-                            await modal_int.response.defer(ephemeral=True)
-                            
-                            query = self.song_query.value.strip()
-                            
-                            # Try to connect to voice channel
-                            try:
-                                # Import wavelink for music playback
-                                import wavelink
-                                
-                                # Import CustomPlayer from music cog
-                                from cogs.music import CustomPlayer
-                                
-                                # Check if bot is already connected to a voice channel in this guild
-                                player = self.guild.voice_client
-                                
-                                if player:
-                                    # Bot is already connected
-                                    if player.channel.id != self.voice_channel.id:
-                                        # Move to the target channel
-                                        await player.move_to(self.voice_channel)
-                                    # Player already exists, we'll use it
-                                else:
-                                    # Bot is not connected, connect now
-                                    player = await self.voice_channel.connect(cls=CustomPlayer, self_deaf=True)
-                                
-                                # Verify we have a valid player
-                                if not player:
-                                    await modal_int.followup.send(
-                                        "❌ Failed to establish voice connection.",
-                                        ephemeral=True
-                                    )
-                                    return
-                                
-                                # Set text channel for the player
-                                if hasattr(player, 'text_channel'):
-                                    player.text_channel = modal_int.channel
-                                
-                                # Get the music cog
-                                music_cog = self.parent_cog.bot.get_cog('Music')
-                                
-                                if not music_cog:
-                                    await modal_int.followup.send(
-                                        "❌ Music system not available.",
-                                        ephemeral=True
-                                    )
-                                    return
-                                
-                                # Try to play the song
-                                try:
-                                    # Search for tracks
-                                    tracks = await wavelink.Playable.search(query)
-                                    
-                                    if not tracks:
-                                        await modal_int.followup.send(
-                                            f"❌ No results found for: `{query}`",
-                                            ephemeral=True
-                                        )
-                                        return
-                                    
-                                    track = tracks[0]
-                                    
-                                    # Add track to queue
-                                    await player.queue.put_wait(track)
-                                    
-                                    # If not playing, start playback
-                                    if not player.playing:
-                                        await player.play(player.queue.get())
-                                    
-                                    # Create success embed
-                                    success_embed = discord.Embed(
-                                        title="🎵 Music Playing Remotely",
-                                        description=(
-                                            f"**Song:** {track.title}\n"
-                                            f"**Artist:** {track.author}\n"
-                                            f"**Duration:** {self.format_duration(track.length)}\n"
-                                            f"**Voice Channel:** {self.voice_channel.mention}\n"
-                                            f"**Server:** {self.guild.name}\n\n"
-                                            f"{'▶️ Now Playing' if player.playing and not player.queue.is_empty else '📋 Added to Queue'}"
-                                        ),
-                                        color=0x57F287
-                                    )
-                                    
-                                    if track.artwork:
-                                        success_embed.set_thumbnail(url=track.artwork)
-                                    
-                                    success_embed.set_footer(
-                                        text=f"Requested by {modal_int.user.display_name}",
-                                        icon_url=modal_int.user.display_avatar.url
-                                    )
-                                    
-                                    await modal_int.followup.send(embed=success_embed, ephemeral=True)
-                                    
-                                except Exception as play_error:
-                                    print(f"Music playback error: {play_error}")
-                                    import traceback
-                                    traceback.print_exc()
-                                    await modal_int.followup.send(
-                                        f"❌ Error playing music: {str(play_error)}",
-                                        ephemeral=True
-                                    )
-                            
-                            except discord.Forbidden:
-                                await modal_int.followup.send(
-                                    "❌ Bot doesn't have permission to connect to this voice channel.",
-                                    ephemeral=True
-                                )
-                            except Exception as connect_error:
-                                print(f"Voice connect error: {connect_error}")
-                                await modal_int.followup.send(
-                                    f"❌ Error connecting to voice channel: {str(connect_error)}",
-                                    ephemeral=True
-                                )
-                        
-                        except Exception as e:
-                            print(f"Song search error: {e}")
-                            import traceback
-                            traceback.print_exc()
-                            await modal_int.followup.send(
-                                f"❌ An error occurred: {str(e)}",
-                                ephemeral=True
-                            )
-                    
-                    def format_duration(self, milliseconds):
-                        """Format duration from milliseconds to MM:SS"""
-                        seconds = milliseconds // 1000
-                        minutes = seconds // 60
-                        seconds = seconds % 60
-                        return f"{minutes}:{seconds:02d}"
-                
-                modal = SongSearchModal(self, voice_channel, guild)
-                await select_interaction.response.send_modal(modal)
-            
-            select.callback = voice_channel_selected
-            
-            view = discord.ui.View(timeout=300)
-            view.add_item(select)
-            
-            # Back button
-            back_button = discord.ui.Button(
-                label="◀ Back",
-                emoji="🏰",
-                style=discord.ButtonStyle.secondary
-            )
-            back_button.callback = lambda i: self.show_server_management(i, guild)
-            view.add_item(back_button)
-            
-            embed = discord.Embed(
-                title=f"🎵 Play Music in {guild.name}",
-                description=(
-                    "**Remote Music Control**\n\n"
-                    "Select a voice channel where you want to play music.\n\n"
-                    "**Supported:**\n"
-                    "• YouTube URLs\n"
-                    "• Spotify URLs\n"
-                    "• Song names\n"
-                    "• Artist + Song search\n\n"
-                    "The bot will connect to the voice channel and play your requested song!"
-                ),
-                color=0x5865F2
-            )
-            
-            await interaction.response.edit_message(embed=embed, view=view)
-            
-        except Exception as e:
-            print(f"Play music error: {e}")
-            import traceback
-            traceback.print_exc()
-            await interaction.response.send_message(
-                "❌ An error occurred while setting up music playback.",
                 ephemeral=True
             )
 

@@ -912,7 +912,7 @@ async def setup_hook():
         "cogs.events",
         "cogs.server_age",
         "cogs.personalise_chat",
-        # "cogs.music",  # Music bot functionality (Disabled for now)
+        # "cogs.music",  # Music bot functionality (Disabled)
         "cogs.voice_conversation",  # Voice chat with AI
         "cogs.tts",  # Text-to-Speech in voice channels
         "cogs.auto_translate",  # Auto-translate with DeepL
@@ -950,7 +950,7 @@ async def setup_hook():
     except Exception as e:
         logger.error(f"❌ Failed to load user profiles: {e}")
     
-    # Initialize playlist storage (Disabled for now)
+    # Initialize playlist storage (Disabled with music system)
     # try:
     #     from playlist_storage import playlist_storage
     #     await playlist_storage.initialize()
@@ -958,7 +958,7 @@ async def setup_hook():
     # except Exception as e:
     #     logger.error(f"❌ Failed to initialize playlist storage: {e}")
     
-    # Initialize music state storage (Disabled for now)
+    # Initialize music state storage (Disabled with music system)
     # try:
     #     from music_state_storage import music_state_storage
     #     await music_state_storage.initialize()

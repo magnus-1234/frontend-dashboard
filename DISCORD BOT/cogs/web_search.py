@@ -132,7 +132,7 @@ class WebSearch(commands.Cog):
                 )
 
             # Add footer with result count
-            embed.set_footer(text=f"Showing {len(results[:max_results])} of {len(results)} results")
+            embed.set_footer(text="Whiteout Survival | Magnus")} of {len(results)} results")
             embed.timestamp = discord.utils.utcnow()
 
             if interaction.response.is_done():

@@ -30,16 +30,6 @@ import random
 from dotenv import load_dotenv
 from sheets_manager import SheetsManager, is_event_related_query
 from alliance_filter import filter_sheet_data, format_alliance_data, is_alliance_related
-from bson import ObjectId
-
-class MongoJSONEncoder(json.JSONEncoder):
-    def default(self, o):
-        if isinstance(o, ObjectId):
-            return str(o)
-        return super().default(o)
-
-def mongo_dumps(obj, **kwargs):
-    return json.dumps(obj, cls=MongoJSONEncoder, **kwargs)
 
 # Load environment variables
 load_dotenv()
@@ -47,21 +37,6 @@ load_dotenv('.env.production')
 
 # Configure logging
 logger = logging.getLogger(__name__)
-
-def clean_payload(obj):
-    """Recursively convert non-JSON-serializable objects to strings."""
-    if isinstance(obj, dict):
-        return {k: clean_payload(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [clean_payload(v) for v in obj]
-    elif obj is None or isinstance(obj, (str, int, float, bool)):
-        return obj
-    elif hasattr(obj, 'isoformat'):  # datetime, date
-        return obj.isoformat()
-    else:
-        # Handle ObjectId and other custom types by converting to string
-        # This catches bson.ObjectId without needing to import bson
-        return str(obj)
 
 
 class APIKeyStatus(Enum):
@@ -145,7 +120,7 @@ class RobustOpenRouterManager:
             return "Placeholder: No API keys configured. Please set OPENROUTER_API_KEY_1 in .env for real responses."
 
         # Check cache first
-        cache_key = hashlib.md5(mongo_dumps(messages, sort_keys=True).encode()).hexdigest()
+        cache_key = hashlib.md5(json.dumps(messages, sort_keys=True).encode()).hexdigest()
         async with self._lock:
             if cache_key in self.cache:
                 self.cache_hits += 1
@@ -220,9 +195,8 @@ class RobustOpenRouterManager:
         headers = {
             "Authorization": f"Bearer {key_info.key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://github.com/storage3mohitraj444362-commits/WOS-BOT",
-            "X-Title": "Whiteout Survival Assistant",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "HTTP-Referer": "https://github.com/your-repo/angel-bot",  # Replace with your actual domain
+            "X-Title": "Angel Bot"
         }
 
         # Enhanced logging for diagnostics
@@ -232,15 +206,8 @@ class RobustOpenRouterManager:
         logger.info(f"Message count: {len(messages)}, System prompt: {system_prompt_len} chars, User message: {user_msg_len} chars")
         logger.debug(f"Using API key {key_info.index + 1}")
 
-        # Clean payload to ensure no ObjectId or other non-serializable types cause errors
-        try:
-            cleaned_payload = clean_payload(payload)
-        except Exception as e:
-            logger.error(f"Error cleaning payload: {e}")
-            cleaned_payload = payload  # Fallback (will likely fail in aiohttp if dirty)
-
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, data=mongo_dumps(cleaned_payload), headers=headers) as response:
+            async with session.post(url, json=payload, headers=headers) as response:
                 logger.info(f"API response status: {response.status}")
                 
                 if response.status == 200:
@@ -266,7 +233,7 @@ class RobustOpenRouterManager:
                     # Enhanced logging for empty content
                     if not content:
                         logger.warning(f"⚠️  API returned EMPTY content!")
-                        logger.warning(f"Full response structure: {mongo_dumps(data, indent=2)[:2000]}")
+                        logger.warning(f"Full response structure: {json.dumps(data, indent=2)[:2000]}")
                         logger.warning(f"Choices array: {data.get('choices', [])}")
                         if data.get('choices'):
                             first_choice = data['choices'][0]
@@ -444,7 +411,7 @@ async def make_request(messages: List[Dict[str, str]], max_tokens: int = 1000, i
                             filtered_data = [x for x in alliance_data if x.get('Alliance Name', '').upper() == 'ICE']
                             if filtered_data:
                                 formatted_messages = format_alliance_data(filtered_data, user_question + " with power")  # Added "with power" to force power display
-                                return "ALLIANCE_MESSAGES:" + mongo_dumps(formatted_messages)
+                                return "ALLIANCE_MESSAGES:" + json.dumps(formatted_messages)
                         alliance_text = manager.sheets_manager.format_alliance_data_for_prompt(alliance_data)
                         sheet_data += "\n\nCurrent Alliance Data:\n" + alliance_text
                     else:
@@ -657,7 +624,7 @@ async def make_image_request(prompt: str, api_key: str = None, width: int = None
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.post(url, data=mongo_dumps(payload), headers=headers, timeout=120) as response:
+                async with session.post(url, json=payload, headers=headers, timeout=120) as response:
                     if response.status == 200:
                         data = await response.json()
                         image_url = data["data"][0]["url"]

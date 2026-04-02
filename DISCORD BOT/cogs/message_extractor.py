@@ -1457,7 +1457,7 @@ class MessageExtractor(commands.Cog):
                 )
                 field_count += 1
             
-            embed.set_footer(text=f"Endpoint ID: {guild.id}")
+            embed.set_footer(text="Whiteout Survival | Magnus")
             
             await interaction.followup.send(embed=embed, ephemeral=True)
             
@@ -1989,9 +1989,9 @@ class FormatSelectionView(discord.ui.View):
             )
         
         if len(admin_guilds) > 25:
-            embed.set_footer(text=f"Showing 25 of {len(admin_guilds)} servers")
+            embed.set_footer(text="Whiteout Survival | Magnus")} servers")
         else:
-            embed.set_footer(text=f"Total: {len(admin_guilds)} server(s)")
+            embed.set_footer(text="Whiteout Survival | Magnus")} server(s)")
         
         await interaction.followup.send(embed=embed, ephemeral=True)
     

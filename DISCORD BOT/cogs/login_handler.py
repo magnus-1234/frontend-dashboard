@@ -63,17 +63,6 @@ class LoginHandler:
             os.makedirs(self.log_directory)
         self.log_file = os.path.join(self.log_directory, 'login_handler.txt')
         
-        # Setup modern logging with rotation
-        import logging
-        from logging.handlers import RotatingFileHandler
-        self.logger = logging.getLogger("LoginHandler")
-        self.logger.setLevel(logging.INFO)
-        # Clear existing handlers to avoid duplicates on reload
-        self.logger.handlers = []
-        handler = RotatingFileHandler(self.log_file, maxBytes=2*1024*1024, backupCount=2, encoding='utf-8')
-        handler.setFormatter(logging.Formatter('[%(asctime)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
-        self.logger.addHandler(handler)
-        
         # Mark as initialized
         self._initialized = True
     
@@ -85,13 +74,12 @@ class LoginHandler:
         return ssl_context
     
     def log_message(self, message: str):
-        """Log a message with timestamp using the rotating logger"""
-        if hasattr(self, 'logger'):
-            self.logger.info(message)
-        else:
-            # Fallback if logger not initialized
-            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            print(f"[{timestamp}] {message}")
+        """Log a message with timestamp"""
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        log_entry = f"[{timestamp}] {message}\n"
+        
+        with open(self.log_file, 'a', encoding='utf-8') as f:
+            f.write(log_entry)
     
     def get_alliance_lock(self, alliance_id: str) -> asyncio.Lock:
         """Get or create alliance-specific lock"""
@@ -286,69 +274,59 @@ class LoginHandler:
             else:
                 connector = aiohttp.TCPConnector(ssl=self.ssl_context)
             
-            timeout = aiohttp.ClientTimeout(total=20)
-            async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
-                try:
-                    async with session.post(api_url, headers=headers, data=form) as response:
-                        # Record the API request
-                        self._record_api_request(api_num)
+            async with aiohttp.ClientSession(connector=connector) as session:
+                async with session.post(api_url, headers=headers, data=form) as response:
+                    # Record the API request
+                    self._record_api_request(api_num)
+                    
+                    if response.status == 200:
+                        data = await response.json()
                         
-                        if response.status == 200:
-                            data = await response.json()
-                            
-                            # Check if we have valid data
-                            if data.get('data'):
-                                return {
-                                    'status': 'success',
-                                    'data': data['data'],
-                                    'api_used': api_num,
-                                    'error_message': None
-                                }
-                            
-                            # Check if this is specifically error 40004 (role not exist)
-                            elif data.get('err_code') == 40004:
-                                return {
-                                    'status': 'not_found',
-                                    'data': None,
-                                    'api_used': api_num,
-                                    'error_message': 'Player does not exist (role not exist)',
-                                    'err_code': 40004
-                                }
-                            
-                            # Other cases where data is empty but not error 40004
-                            else:
-                                err_code = data.get('err_code', 'unknown')
-                                err_msg = data.get('msg', 'Unknown error')
-                                return {
-                                    'status': 'error',
-                                    'data': None,
-                                    'api_used': api_num,
-                                    'error_message': f'API Error {err_code}: {err_msg}',
-                                    'err_code': err_code
-                                }
-                        elif response.status == 429:
-                            # This shouldn't happen with our rate limiting, but handle it
+                        # Check if we have valid data
+                        if data.get('data'):
                             return {
-                                'status': 'rate_limited',
+                                'status': 'success',
+                                'data': data['data'],
+                                'api_used': api_num,
+                                'error_message': None
+                            }
+                        
+                        # Check if this is specifically error 40004 (role not exist)
+                        elif data.get('err_code') == 40004:
+                            return {
+                                'status': 'not_found',
                                 'data': None,
                                 'api_used': api_num,
-                                'error_message': 'Unexpected rate limit'
+                                'error_message': 'Player does not exist (role not exist)',
+                                'err_code': 40004
                             }
+                        
+                        # Other cases where data is empty but not error 40004
                         else:
+                            err_code = data.get('err_code', 'unknown')
+                            err_msg = data.get('msg', 'Unknown error')
                             return {
                                 'status': 'error',
                                 'data': None,
                                 'api_used': api_num,
-                                'error_message': f'HTTP {response.status}'
+                                'error_message': f'API Error {err_code}: {err_msg}',
+                                'err_code': err_code
                             }
-                except asyncio.TimeoutError:
-                    self.log_message(f"Timeout fetching player data for FID {fid}")
-                    return {
-                        'status': 'error',
-                        'data': None,
-                        'api_used': api_num,
-                        'error_message': 'API Request Timed Out (20s)'
-                    }
+                    elif response.status == 429:
+                        # This shouldn't happen with our rate limiting, but handle it
+                        return {
+                            'status': 'rate_limited',
+                            'data': None,
+                            'api_used': api_num,
+                            'error_message': 'Unexpected rate limit'
+                        }
+                    else:
+                        return {
+                            'status': 'error',
+                            'data': None,
+                            'api_used': api_num,
+                            'error_message': f'HTTP {response.status}'
+                        }
                         
         except Exception as e:
             self.log_message(f"Error fetching player data for FID {fid}: {str(e)}")

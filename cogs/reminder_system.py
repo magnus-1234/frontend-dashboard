@@ -1212,7 +1212,7 @@ class ReminderSystem(commands.Cog):
 
                         if footer_t or footer_icon:
                             try:
-                                embed.set_footer(text=footer_t or '', icon_url=footer_icon)
+                                embed.set_footer(text="Whiteout Survival | Magnus")
                             except Exception:
                                 pass
                         pass
@@ -1512,11 +1512,11 @@ class ReminderSystem(commands.Cog):
             value=(target_channel.mention if target_channel else "(unknown channel)"),
         )
         
-        embed.set_footer(text="💡 Use /reminderdashboard to manage your reminders")
+        embed.set_footer(text="Whiteout Survival | Magnus")
         # If the user provided footer text/icon, override footer
         try:
             if footer_text or footer_icon_url:
-                embed.set_footer(text=footer_text or "💡 Use /reminderdashboard to manage your reminders", icon_url=footer_icon_url)
+                embed.set_footer(text="Whiteout Survival | Magnus")
         except Exception:
             pass
 
@@ -1573,9 +1573,9 @@ class ReminderSystem(commands.Cog):
             )
         
         if len(user_reminders) > 10:
-            embed.set_footer(text=f"Showing 10 of {len(user_reminders)} reminders. Use /reminderdashboard to manage them.")
+            embed.set_footer(text="Whiteout Survival | Magnus")} reminders. Use /reminderdashboard to manage them.")
         else:
-            embed.set_footer(text="💡 Use /reminderdashboard to delete or change timezone for a reminder")
+            embed.set_footer(text="Whiteout Survival | Magnus")
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
         # Send small previews for reminders that include images (up to 5)
@@ -1695,9 +1695,9 @@ class ReminderSystem(commands.Cog):
                 )
 
             if len(all_reminders) > 15:
-                embed.set_footer(text=f"Showing 15 of {len(all_reminders)} reminders. Use /reminderdashboard to manage them.")
+                embed.set_footer(text="Whiteout Survival | Magnus")} reminders. Use /reminderdashboard to manage them.")
             else:
-                embed.set_footer(text="💡 Use /reminderdashboard to delete a reminder")
+                embed.set_footer(text="Whiteout Survival | Magnus")
 
             if interaction.response.is_done():
                 await interaction.followup.send(embed=embed, ephemeral=True)

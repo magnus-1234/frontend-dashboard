@@ -145,7 +145,7 @@ class VoiceConversation(commands.Cog):
                     ),
                     color=0x00FF00
                 )
-                embed.set_footer(text=f"Started by {interaction.user.name}")
+                embed.set_footer(text="Whiteout Survival | Magnus")
                 
                 await interaction.followup.send(embed=embed)
                 

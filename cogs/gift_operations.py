@@ -1616,7 +1616,7 @@ class GiftOperations(commands.Cog):
                 )
             
             # Add footer
-            embed.set_footer(text="History scan complete. Check message reactions for individual code status.")
+            embed.set_footer(text="Whiteout Survival | Magnus")
             
             # Send the message
             await channel.send(embed=embed)
@@ -2535,9 +2535,9 @@ class GiftOperations(commands.Cog):
             embed.add_field(name=name, value=value, inline=False)
         
         if len(active_codes) > 10:
-            embed.set_footer(text=f"And {len(active_codes) - 10} more codes available.")
+            embed.set_footer(text="Whiteout Survival | Magnus") - 10} more codes available.")
         else:
-            embed.set_footer(text=f"Showing {len(active_codes)} active code{'s' if len(active_codes) != 1 else ''}.")
+            embed.set_footer(text="Whiteout Survival | Magnus")} active code{'s' if len(active_codes) != 1 else ''}.")
 
         # Step 7: Create view with buttons
         from giftcode_poster import GiftCodeView
@@ -4788,7 +4788,7 @@ class GiftView(discord.ui.View):
                                         ),
                                         color=discord.Color.green()
                                     )
-                                    queue_embed.set_footer(text="Gift codes are processed sequentially to prevent issues.")
+                                    queue_embed.set_footer(text="Whiteout Survival | Magnus")
                                     
                                     await button_interaction.response.edit_message(
                                         embed=queue_embed,

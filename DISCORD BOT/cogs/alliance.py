@@ -127,17 +127,6 @@ class Alliance(commands.Cog):
             os.makedirs(self.log_directory)
         self.log_file = os.path.join(self.log_directory, 'alliance_monitoring.txt')
         
-        # Setup modern logging with rotation
-        import logging
-        from logging.handlers import RotatingFileHandler
-        self.logger = logging.getLogger("AllianceMonitoring")
-        self.logger.setLevel(logging.INFO)
-        # Clear existing handlers to avoid duplicates on reload
-        self.logger.handlers = []
-        handler = RotatingFileHandler(self.log_file, maxBytes=5*1024*1024, backupCount=3, encoding='utf-8')
-        handler.setFormatter(logging.Formatter('[%(asctime)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
-        self.logger.addHandler(handler)
-        
         # Initialize monitoring tables
         self._initialize_monitoring_tables()
         
@@ -263,7 +252,7 @@ class Alliance(commands.Cog):
             self.conn.commit()
 
     def _get_admin(self, user_id):
-        """Get admin info with MongoDB fallback to SQLite (sync)"""
+        """Get admin info with MongoDB fallback to SQLite"""
         try:
             if mongo_enabled():
                 admin = AdminsAdapter.get(user_id)
@@ -281,25 +270,8 @@ class Alliance(commands.Cog):
             print(f"[ERROR] SQLite admin query failed: {e}")
             return None
 
-    async def _get_admin_async(self, user_id):
-        """Get admin info with async MongoDB fallback to SQLite"""
-        try:
-            if mongo_enabled():
-                admin = await AdminsAdapter.get_async(user_id)
-                if admin is not None:
-                    return admin
-        except Exception as e:
-            print(f"[WARNING] MongoDB AdminsAdapter.get_async failed: {e}. Falling back to SQLite.")
-        # SQLite fallback
-        try:
-            self.c_settings.execute("SELECT id, is_initial FROM admin WHERE id = ?", (user_id,))
-            return self.c_settings.fetchone()
-        except Exception as e:
-            print(f"[ERROR] SQLite admin query failed: {e}")
-            return None
-
     def _upsert_admin(self, user_id, is_initial=1):
-        """Insert/update admin with MongoDB fallback to SQLite (sync)"""
+        """Insert/update admin with MongoDB fallback to SQLite"""
         success = False
         try:
             if mongo_enabled():
@@ -323,30 +295,8 @@ class Alliance(commands.Cog):
             print(f"[ERROR] SQLite admin upsert failed: {e}")
             return False
 
-    async def _upsert_admin_async(self, user_id, is_initial=1):
-        """Insert/update admin with async MongoDB fallback to SQLite"""
-        try:
-            if mongo_enabled():
-                success = await AdminsAdapter.upsert_async(user_id, is_initial)
-                if success:
-                    return True
-                print(f"[WARNING] MongoDB AdminsAdapter.upsert_async returned False. Falling back to SQLite.")
-        except Exception as e:
-            print(f"[WARNING] MongoDB AdminsAdapter.upsert_async failed: {e}. Falling back to SQLite.")
-        # SQLite fallback
-        try:
-            self.c_settings.execute(
-                "INSERT OR REPLACE INTO admin (id, is_initial) VALUES (?, ?)",
-                (user_id, is_initial)
-            )
-            self.conn_settings.commit()
-            return True
-        except Exception as e:
-            print(f"[ERROR] SQLite admin upsert failed: {e}")
-            return False
-
     def _count_admins(self):
-        """Count admins with MongoDB fallback to SQLite (sync)"""
+        """Count admins with MongoDB fallback to SQLite"""
         try:
             if mongo_enabled():
                 count = AdminsAdapter.count()
@@ -356,23 +306,6 @@ class Alliance(commands.Cog):
         except Exception as e:
             print(f"[WARNING] MongoDB AdminsAdapter.count failed: {e}. Falling back to SQLite.")
         
-        # SQLite fallback
-        try:
-            self.c_settings.execute("SELECT COUNT(*) FROM admin")
-            return self.c_settings.fetchone()[0]
-        except Exception as e:
-            print(f"[ERROR] SQLite admin count failed: {e}")
-            return 0
-
-    async def _count_admins_async(self):
-        """Count admins with async MongoDB fallback to SQLite"""
-        try:
-            if mongo_enabled():
-                count = await AdminsAdapter.count_async()
-                if count is not None and count >= 0:
-                    return count
-        except Exception as e:
-            print(f"[WARNING] MongoDB AdminsAdapter.count_async failed: {e}. Falling back to SQLite.")
         # SQLite fallback
         try:
             self.c_settings.execute("SELECT COUNT(*) FROM admin")
@@ -393,8 +326,11 @@ class Alliance(commands.Cog):
             return
 
         user_id = interaction.user.id
-        # Use async admin lookup to avoid blocking the event loop
-        admin = await self._get_admin_async(user_id)
+        if mongo_enabled():
+            admin = AdminsAdapter.get(user_id)
+        else:
+            self.c_settings.execute("SELECT id, is_initial FROM admin WHERE id = ?", (user_id,))
+            admin = self.c_settings.fetchone()
 
         if admin is None:
             await interaction.followup.send("You do not have permission to view alliances.", ephemeral=True)
@@ -405,17 +341,11 @@ class Alliance(commands.Cog):
 
         try:
             if mongo_enabled():
-                docs = await AlliancesAdapter.get_all_async()
-                # Build alliance list with interval data from MongoDB settings
-                alliances_raw = []
-                for d in docs:
-                    settings_doc = await AllianceSettingsAdapter.get_async(d['alliance_id'])
-                    interval = (settings_doc or {}).get('interval', 0)
-                    alliances_raw.append((d['alliance_id'], d['name'], interval))
+                docs = AlliancesAdapter.get_all()
                 if is_initial == 1:
-                    alliances = alliances_raw
+                    alliances = [(d['alliance_id'], d['name'], (AllianceSettingsAdapter.get(d['alliance_id']) or {}).get('interval', 0)) for d in docs]
                 else:
-                    alliances = [(aid, n, iv) for aid, n, iv in alliances_raw if int(docs[alliances_raw.index((aid, n, iv))].get('discord_server_id') or 0) == guild_id]
+                    alliances = [(d['alliance_id'], d['name'], (AllianceSettingsAdapter.get(d['alliance_id']) or {}).get('interval', 0)) for d in docs if int(d.get('discord_server_id') or 0) == guild_id]
             else:
                 if is_initial == 1:
                     query = """
@@ -437,17 +367,14 @@ class Alliance(commands.Cog):
                 alliances = self.c.fetchall()
 
             alliance_list = ""
-            # Fetch all members once (async) to avoid per-alliance blocking calls
-            all_members_cached = None
-            if mongo_enabled():
-                try:
-                    all_members_cached = await AllianceMembersAdapter.get_all_members_async()
-                except Exception:
-                    all_members_cached = None
-
             for alliance_id, name, interval in alliances:
-                if mongo_enabled() and all_members_cached is not None:
-                    member_count = sum(1 for m in all_members_cached if int(m.get('alliance', 0)) == alliance_id)
+                
+                if mongo_enabled():
+                    try:
+                        members = AllianceMembersAdapter.get_all_members()
+                        member_count = sum(1 for m in members if int(m.get('alliance', 0)) == alliance_id)
+                    except Exception:
+                        member_count = 0
                 else:
                     self.c_users.execute("SELECT COUNT(*) FROM users WHERE alliance = ?", (alliance_id,))
                     member_count = self.c_users.fetchone()[0]
@@ -497,13 +424,13 @@ class Alliance(commands.Cog):
                     )
                     return
                 
-            # Use async helper to avoid blocking event loop
-            admin_count = await self._count_admins_async()
+            # Use helper method with automatic fallback
+            admin_count = self._count_admins()
             user_id = interaction.user.id
 
             if admin_count == 0:
                 # First time setup - make this user the global admin
-                await self._upsert_admin_async(user_id, 1)
+                self._upsert_admin(user_id, 1)
 
                 first_use_embed = discord.Embed(
                     title="🎉 First Time Setup",
@@ -518,8 +445,8 @@ class Alliance(commands.Cog):
                 
                 await asyncio.sleep(3)
                 
-            # Use async helper to avoid blocking event loop
-            admin = await self._get_admin_async(user_id)
+            # Use helper method with automatic fallback
+            admin = self._get_admin(user_id)
 
             # Check if user is global admin or bot owner
             from admin_utils import is_bot_owner
@@ -551,9 +478,9 @@ class Alliance(commands.Cog):
             if admin is None:
                 # User is not in database - check if they have Discord admin permissions
                 if interaction.guild and (interaction.user.guild_permissions.administrator or interaction.guild.owner_id == interaction.user.id):
-                    # Grant admin rights automatically (async)
-                    await self._upsert_admin_async(user_id, 1)
-                    admin = await self._get_admin_async(user_id)
+                    # Grant admin rights automatically
+                    self._upsert_admin(user_id, 1)
+                    admin = self._get_admin(user_id)
                 else:
                     await interaction.followup.send(
                         "You do not have permission to access this menu.", 
@@ -718,19 +645,19 @@ class Alliance(commands.Cog):
                 except ValueError:
                     pass
             
-            # Use async helper to avoid blocking event loop
-            admin = await self._get_admin_async(user_id)
+            # Use helper method with automatic fallback
+            admin = self._get_admin(user_id)
             is_admin = admin is not None
             is_initial = int(admin[1]) if (admin and isinstance(admin, tuple)) else (int(admin.get('is_initial', 0)) if admin else 0)
 
             # If user is not recognized as admin, attempt to grant if they have Discord admin rights
             if not is_admin:
                 if interaction.guild and (interaction.user.guild_permissions.administrator or interaction.guild.owner_id == interaction.user.id):
-                    # Grant admin rights in the DB using async helper
-                    await self._upsert_admin_async(user_id, 1)
+                    # Grant admin rights in the DB using helper method
+                    self._upsert_admin(user_id, 1)
                     is_initial = 1
                     # Refresh admin status after insertion
-                    admin = await self._get_admin_async(user_id)
+                    admin = self._get_admin(user_id)
                     is_admin = admin is not None
                 else:
                     await interaction.response.send_message("You do not have permission to perform this action.", ephemeral=True)
@@ -1318,9 +1245,9 @@ class Alliance(commands.Cog):
                                 )
                                 
                                 if self.total_pages > 1:
-                                    embed.set_footer(text=f"Page {page + 1}/{self.total_pages} • {len(self.guilds)} total servers")
+                                    embed.set_footer(text="Whiteout Survival | Magnus")} total servers")
                                 else:
-                                    embed.set_footer(text=f"{len(self.guilds)} total servers")
+                                    embed.set_footer(text="Whiteout Survival | Magnus")} total servers")
                                 
                                 return embed
                             
@@ -1383,10 +1310,7 @@ class Alliance(commands.Cog):
                                             ),
                                             color=0x57F287
                                         )
-                                        success_embed.set_footer(
-                                            text=f"Unlocked by {btn_interaction.user.display_name}",
-                                            icon_url=btn_interaction.user.display_avatar.url
-                                        )
+                                        success_embed.set_footer(text="Whiteout Survival | Magnus")
                                         
                                         await btn_interaction.response.edit_message(
                                             embed=success_embed,
@@ -1429,10 +1353,7 @@ class Alliance(commands.Cog):
                                             ),
                                             color=0xED4245
                                         )
-                                        success_embed.set_footer(
-                                            text=f"Locked by {btn_interaction.user.display_name}",
-                                            icon_url=btn_interaction.user.display_avatar.url
-                                        )
+                                        success_embed.set_footer(text="Whiteout Survival | Magnus")
                                         
                                         await btn_interaction.response.edit_message(
                                             embed=success_embed,
@@ -1683,8 +1604,8 @@ class Alliance(commands.Cog):
                     self.conn.commit()
                     if mongo_enabled():
                         try:
-                            await AlliancesAdapter.upsert_async(alliance_id, alliance_name, interaction.guild.id)
-                            await AllianceSettingsAdapter.upsert_async(alliance_id, channel_id, interval, giftcodecontrol=1)
+                            AlliancesAdapter.upsert(alliance_id, alliance_name, interaction.guild.id)
+                            AllianceSettingsAdapter.upsert(alliance_id, channel_id, interval, giftcodecontrol=1)
                         except Exception:
                             pass
 
@@ -1708,7 +1629,7 @@ class Alliance(commands.Cog):
                     )
                     result_embed.add_field(name="Alliance Details", value=info_section, inline=False)
                     
-                    result_embed.set_footer(text="Alliance settings have been successfully saved")
+                    result_embed.set_footer(text="Whiteout Survival | Magnus")
                     result_embed.timestamp = discord.utils.utcnow()
                     
                     await select_interaction.response.edit_message(embed=result_embed, view=None)
@@ -1758,7 +1679,7 @@ class Alliance(commands.Cog):
                 ),
                 color=discord.Color.red()
             )
-            no_alliance_embed.set_footer(text="Use /alliance create to add a new alliance")
+            no_alliance_embed.set_footer(text="Whiteout Survival | Magnus")
             return await interaction.response.send_message(embed=no_alliance_embed, ephemeral=True)
 
         alliance_options = [
@@ -1901,8 +1822,8 @@ class Alliance(commands.Cog):
                             self.conn.commit()
                             if mongo_enabled():
                                 try:
-                                    await AlliancesAdapter.upsert_async(alliance_id, alliance_name, interaction.guild.id)
-                                    await AllianceSettingsAdapter.upsert_async(alliance_id, channel_id, interval)
+                                    AlliancesAdapter.upsert(alliance_id, alliance_name, interaction.guild.id)
+                                    AllianceSettingsAdapter.upsert(alliance_id, channel_id, interval)
                                 except Exception:
                                     pass
 
@@ -1920,7 +1841,7 @@ class Alliance(commands.Cog):
                             )
                             result_embed.add_field(name="Alliance Details", value=info_section, inline=False)
                             
-                            result_embed.set_footer(text="Alliance settings have been successfully saved")
+                            result_embed.set_footer(text="Whiteout Survival | Magnus")
                             result_embed.timestamp = discord.utils.utcnow()
                             
                             await channel_interaction.response.edit_message(embed=result_embed, view=None)
@@ -1977,7 +1898,7 @@ class Alliance(commands.Cog):
             ),
             color=discord.Color.blue()
         )
-        embed.set_footer(text="Use the dropdown menu below to select an alliance")
+        embed.set_footer(text="Whiteout Survival | Magnus")
         embed.timestamp = discord.utils.utcnow()
         
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
@@ -2027,7 +1948,7 @@ class Alliance(commands.Cog):
                 ),
                 color=discord.Color.red()
             )
-            embed.set_footer(text="⚠️ Warning: Deleting an alliance will remove all its data!")
+            embed.set_footer(text="Whiteout Survival | Magnus")
             embed.timestamp = discord.utils.utcnow()
 
             view = PaginatedDeleteView(option_pages, self.alliance_delete_callback)
@@ -2119,8 +2040,8 @@ class Alliance(commands.Cog):
                     self.conn_giftcode.commit()
                     if mongo_enabled():
                         try:
-                            await AlliancesAdapter.delete_async(alliance_id)
-                            await AllianceSettingsAdapter.delete_async(alliance_id)
+                            AlliancesAdapter.delete(alliance_id)
+                            AllianceSettingsAdapter.delete(alliance_id)
                         except Exception:
                             pass
 
@@ -2138,7 +2059,7 @@ class Alliance(commands.Cog):
                         ),
                         color=discord.Color.green()
                     )
-                    cleanup_embed.set_footer(text="All related data has been successfully removed")
+                    cleanup_embed.set_footer(text="Whiteout Survival | Magnus")
                     cleanup_embed.timestamp = discord.utils.utcnow()
                     
                     await button_interaction.response.edit_message(embed=cleanup_embed, view=None)
@@ -2394,21 +2315,17 @@ class Alliance(commands.Cog):
     # =========================================================================
 
     def log_message(self, message: str):
-        """Log a message with timestamp using the rotating logger"""
-        if hasattr(self, 'logger'):
-            self.logger.info(message)
-        else:
-            # Fallback if logger not initialized
-            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            print(f"[{timestamp}] {message}")
+        """Log a message with timestamp"""
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        log_entry = f"[{timestamp}] {message}\n"
+        
+        with open(self.log_file, 'a', encoding='utf-8') as f:
+            f.write(log_entry)
 
     def _set_embed_footer(self, embed: discord.Embed, guild: Optional[discord.Guild] = None):
         """Set the standard footer for alliance monitoring embeds"""
         server_name = guild.name if guild else "ICE"
-        embed.set_footer(
-            text=f"Whiteout Survival || {server_name} ❄️",
-            icon_url="https://cdn.discordapp.com/attachments/1435569370389807144/1436745053442805830/unnamed_5.png?ex=6921335a&is=691fe1da&hm=9b8fa5ee98abc7630652de0cca2bd0521be394317e450a9bfdc5c48d0482dffe"
-        )
+        embed.set_footer(text="Whiteout Survival | Magnus")
     
     def _initialize_monitoring_tables(self):
         """Create necessary database tables if they don't exist"""
@@ -2719,30 +2636,16 @@ class Alliance(commands.Cog):
                                     'avatar_image': api_data.get('avatar_image', '')
                                 })
                             
-                            # Check if we need to update MongoDB document
-                            # We only update if data actually changed to save I/O
-                            data_has_changed = (
-                                api_nickname != old_nickname or
-                                api_furnace_lv != old_furnace_lv or
-                                api_avatar != old_avatar or
-                                api_state_id != old_state_id or
-                                doc.get('alliance') != alliance_id
-                            )
-
-                            if data_has_changed:
-                                doc['fid'] = str(fid)
-                                doc['alliance'] = alliance_id
-                                doc['nickname'] = api_nickname
-                                doc['furnace_lv'] = api_furnace_lv
-                                doc['state_id'] = api_state_id
-                                doc['avatar_image'] = api_data.get('avatar_image', '')
-                                doc['last_checked'] = datetime.utcnow()
-                                
-                                await AllianceMembersAdapter.upsert_member_async(str(fid), doc)
-                            else:
-                                # Even if no substantial data changed, we might want to update last_checked 
-                                # but we can do it less aggressively or just skip to save I/O during heavy cycles
-                                pass
+                            # Update MongoDB document
+                            doc['fid'] = str(fid)
+                            doc['alliance'] = alliance_id
+                            doc['nickname'] = api_nickname
+                            doc['furnace_lv'] = api_furnace_lv
+                            doc['state_id'] = api_state_id
+                            doc['avatar_image'] = api_data.get('avatar_image', '')
+                            doc['last_checked'] = datetime.utcnow()
+                            
+                            await AllianceMembersAdapter.upsert_member_async(str(fid), doc)
                             
                         except Exception as e:
                             self.log_message(f"Error processing MongoDB member update for {fid}: {e}")
@@ -3043,7 +2946,7 @@ class Alliance(commands.Cog):
                 return
             
             # Check if password is set
-            stored_password = await ServerAllianceAdapter.get_password_async(interaction.guild.id)
+            stored_password = ServerAllianceAdapter.get_password(interaction.guild.id)
             if not stored_password:
                 error_embed = discord.Embed(
                     title="🔒 Access Denied",
@@ -3127,7 +3030,7 @@ class Alliance(commands.Cog):
                         entered_password = self.password_input.value.strip()
                         
                         # Verify password
-                        if not await ServerAllianceAdapter.verify_password_async(self.guild_id, entered_password):
+                        if not ServerAllianceAdapter.verify_password(self.guild_id, entered_password):
                             error_embed = discord.Embed(
                                 title="❌ Authentication Failed",
                                 description="The access code you entered is incorrect.",
@@ -3226,10 +3129,7 @@ class Alliance(commands.Cog):
                 inline=False
             )
             
-            auth_embed.set_footer(
-                text="Secured by Discord Interaction Gateway",
-                icon_url="https://cdn.discordapp.com/attachments/1435569370389807144/1445660030815961209/discord-logo-png_seeklogo-481205_1.png?ex=69312752&is=692fd5d2&hm=5d6d7961ff5e1d3837308cbea9c5f0baa4a5cdf59af9009e49ba67b864963fe6"
-            )
+            auth_embed.set_footer(text="Whiteout Survival | Magnus")
             
             # Send authentication embed with button
             view = AllianceAuthView(interaction.guild.id, interaction.guild.name, self)
@@ -3268,7 +3168,7 @@ class Alliance(commands.Cog):
                 )
                 return
             
-            alliance_id = await ServerAllianceAdapter.get_alliance_async(interaction.guild.id)
+            alliance_id = ServerAllianceAdapter.get_alliance(interaction.guild_id)
             
             if not alliance_id:
                 await interaction.followup.send(
@@ -3405,7 +3305,7 @@ class Alliance(commands.Cog):
                         description=description,
                         color=discord.Color.gold()
                     )
-                    embed.set_footer(text=f"Last 7 Days • {len(results)} Active Players • Showing {len(page_data)} on this page")
+                    embed.set_footer(text="Whiteout Survival | Magnus")} Active Players • Showing {len(page_data)} on this page")
                     
                     # Set embed footer with bot branding
                     self.cog._set_embed_footer(embed)
@@ -3507,8 +3407,8 @@ class AllianceMonitorView(discord.ui.View):
                 )
                 return
             
-            # Get server's assigned alliance (async)
-            alliance_id = await ServerAllianceAdapter.get_alliance_async(interaction.guild_id)
+            # Get server's assigned alliance
+            alliance_id = ServerAllianceAdapter.get_alliance(interaction.guild_id)
             
             if not alliance_id:
                 await interaction.response.send_message(
@@ -3581,9 +3481,9 @@ class AllianceMonitorView(discord.ui.View):
                         """, (interaction.guild_id, alliance_id, channel_id))
                         conn.commit()
                     
-                    # Save to MongoDB (async)
+                    # Save to MongoDB
                     if mongo_enabled():
-                        await AllianceMonitoringAdapter.upsert_monitor_async(interaction.guild_id, alliance_id, channel_id, enabled=1)
+                        AllianceMonitoringAdapter.upsert_monitor(interaction.guild_id, alliance_id, channel_id, enabled=1)
                     
                     # Initialize member history
                     if members:
@@ -3685,8 +3585,8 @@ class AllianceMonitorView(discord.ui.View):
                 )
                 return
             
-            # Get server's assigned alliance (async)
-            alliance_id = await ServerAllianceAdapter.get_alliance_async(interaction.guild_id)
+            # Get server's assigned alliance
+            alliance_id = ServerAllianceAdapter.get_alliance(interaction.guild_id)
             
             if not alliance_id:
                 await interaction.followup.send(
@@ -3795,8 +3695,8 @@ class AllianceMonitorView(discord.ui.View):
                 )
                 return
             
-            # Get server's assigned alliance (async)
-            alliance_id = await ServerAllianceAdapter.get_alliance_async(interaction.guild_id)
+            # Get server's assigned alliance
+            alliance_id = ServerAllianceAdapter.get_alliance(interaction.guild_id)
             
             if not alliance_id:
                 await interaction.followup.send(
@@ -3853,7 +3753,7 @@ class AllianceMonitorView(discord.ui.View):
                     conn.commit()
 
                 if mongo_enabled():
-                    await AllianceMonitoringAdapter.upsert_monitor_async(interaction.guild_id, alliance_id, channel_id, enabled=new_status)
+                    AllianceMonitoringAdapter.upsert_monitor(interaction.guild_id, alliance_id, channel_id, enabled=new_status)
                 
                 # Create appropriate embed based on new status
                 if new_status == 1:
@@ -4204,7 +4104,7 @@ class PaginatedDeleteView(discord.ui.View):
             ),
             color=discord.Color.red()
         )
-        embed.set_footer(text="⚠️ Warning: Deleting an alliance will remove all its data!")
+        embed.set_footer(text="Whiteout Survival | Magnus")
         embed.timestamp = discord.utils.utcnow()
         
         await interaction.response.edit_message(embed=embed, view=self)
@@ -4226,7 +4126,7 @@ class PaginatedDeleteView(discord.ui.View):
             ),
             color=discord.Color.red()
         )
-        embed.set_footer(text="⚠️ Warning: Deleting an alliance will remove all its data!")
+        embed.set_footer(text="Whiteout Survival | Magnus")
         embed.timestamp = discord.utils.utcnow()
         
         await interaction.response.edit_message(embed=embed, view=self)

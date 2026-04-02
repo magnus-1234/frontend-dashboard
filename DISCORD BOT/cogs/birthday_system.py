@@ -139,7 +139,7 @@ class BirthdayWishView(discord.ui.View):
                     ),
                     color=0xFF69B4  # Hot pink
                 )
-                embed.set_footer(text="Enjoy your special day! 🎈")
+                embed.set_footer(text="Whiteout Survival | Magnus")
                 await interaction.response.send_message(embed=embed, ephemeral=True)
                 return
             
@@ -203,7 +203,7 @@ class BirthdayWishView(discord.ui.View):
                 inline=False
             )
             
-            embed.set_footer(text="or just try to make their day special in your own way! 🎉")
+            embed.set_footer(text="Whiteout Survival | Magnus")
             
             # Send ephemeral message (only visible to the user who clicked)
             await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -957,8 +957,7 @@ class BirthdaySystem(commands.Cog):
                 # For multiple birthdays, use the birthday cake GIF
                 embed.set_thumbnail(url="https://i.imgur.com/9KWzH9s.gif")
             
-            embed.set_footer(
-                text=f"🎂 Birthday on {datetime.utcnow().strftime('%B %d')}",
+            embed.set_footer(text="Whiteout Survival | Magnus").strftime('%B %d')}",
                 icon_url="https://cdn.discordapp.com/attachments/1435569370389807144/1436745053442805830/unnamed_5.png?ex=6933a85a&is=693256da&hm=75ec361677f174173e526863fdaa30d9b3e6983f9f1ad45dd1a9601aad6c0021"
             )
             

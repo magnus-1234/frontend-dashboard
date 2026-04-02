@@ -1100,16 +1100,8 @@ class ReminderSystem(commands.Cog):
     
     def __init__(self, bot):
         self.bot = bot
-        # Track when the cog was initialized to prevent sending old reminders on restart.
-        # Store as naive UTC datetime for consistent comparison with reminder_time values.
-        self.startup_time = get_accurate_utc_time()  # Always naive UTC
-        # Track last loop execution time to detect freezes/hiccups
-        self.last_check_time = self.startup_time
-        
-        # Maximum age of a reminder we will still send (minutes).
-        # Set to a tight 1 minute so if the bot stalls/freezes, any reminder that couldn't be sent exactly on time is strictly skipped.
-        self.max_staleness_minutes = 1
-        
+        # Track when the cog was initialized to prevent sending old reminders on restart
+        self.startup_time = get_accurate_utc_time()
         # Prefer MongoDB-backed storage if MONGO_URI is provided; otherwise fall back to SQLite
         try:
             if os.getenv('MONGO_URI'):
@@ -1142,67 +1134,21 @@ class ReminderSystem(commands.Cog):
             # Get all due reminders
             due_reminders = self.storage.get_due_reminders()
             
-            now = get_accurate_utc_time()  # naive UTC
-            
-            # Detect loop execution gaps (Freezes)
-            # If the gap since last check is > 90 seconds (on a 60s loop), we just recovered from a freeze.
-            gap_seconds = (now - self.last_check_time).total_seconds()
-            is_recovering_from_freeze = gap_seconds > 90
-            
-            if is_recovering_from_freeze:
-                logger.warning(f"⚠️ Reminder loop recovered from a freeze/hiccup! (Gap: {gap_seconds:.1f}s). Applying stricter staleness checks.")
-
-            # Earliest time we will still send a reminder (older ones are considered stale).
-            # If we just recovered from a freeze, we slightly tighten the window to 30 seconds
-            # to avoid the "flood" effect for anything that became due during the freeze.
-            effective_staleness = 1 if not is_recovering_from_freeze else 0.5
-            stale_cutoff = now - timedelta(minutes=effective_staleness)
-
-            def _to_naive_utc(dt: datetime) -> datetime:
-                """Normalize a datetime to naive UTC for safe comparison."""
-                if dt is None:
-                    return dt
-                if dt.tzinfo is not None:
-                    # Convert timezone-aware datetime to naive UTC
-                    import pytz as _pytz
-                    return dt.astimezone(_pytz.UTC).replace(tzinfo=None)
-                return dt
-
-            # Normalize startup_time once (it should already be naive UTC)
-            startup_naive = _to_naive_utc(self.startup_time)
-
             # Split reminders into those to send and those to skip (silently process)
             to_send = []
             to_skip = []
             
             for r in due_reminders:
-                rt = _to_naive_utc(r.get('reminder_time'))
-                if rt is None:
-                    continue
-                if rt < startup_naive:
-                    # Due before this bot instance started — always skip
-                    to_skip.append(r)
-                elif rt < stale_cutoff:
-                    # Due after startup but too old (bot had a hiccup) — skip silently
-                    to_skip.append(r)
-                else:
+                if r['reminder_time'] >= self.startup_time:
                     to_send.append(r)
+                else:
+                    to_skip.append(r)
             
             # 1. Silently process missed reminders to avoid stalling recurring ones
             if to_skip:
-                logger.info(f"🚫 Silently processing {len(to_skip)} missed/stale reminder(s)")
+                logger.info(f"🚫 Silently processing {len(to_skip)} missed reminder(s) from before startup")
                 for reminder in to_skip:
                     try:
-                        # Determine skip reason for logging
-                        rt = _to_naive_utc(reminder.get('reminder_time'))
-                        reason = "Unknown"
-                        if rt < startup_naive:
-                            reason = f"Due before bot startup ({rt} < {startup_naive})"
-                        elif rt < stale_cutoff:
-                            reason = f"Stale/Freeze recovery ({rt} < {stale_cutoff})"
-                        
-                        logger.info(f"⏭️ Skipping reminder {reminder.get('id')} - Reason: {reason}")
-                        
                         # Mark as sent so it doesn't show up in due_reminders again
                         self.storage.mark_reminder_sent(reminder['id'])
                         
@@ -1266,7 +1212,7 @@ class ReminderSystem(commands.Cog):
 
                         if footer_t or footer_icon:
                             try:
-                                embed.set_footer(text=footer_t or '', icon_url=footer_icon)
+                                embed.set_footer(text="Whiteout Survival | Magnus")
                             except Exception:
                                 pass
                         pass
@@ -1320,9 +1266,6 @@ class ReminderSystem(commands.Cog):
                     
                 except Exception as e:
                     logger.error(f"❌ Failed to send reminder {reminder['id']}: {e}")
-            
-            # Update last check time for the next iteration
-            self.last_check_time = now
         
         except Exception as e:
             logger.error(f"❌ Error in check_reminders task: {e}")
@@ -1569,11 +1512,11 @@ class ReminderSystem(commands.Cog):
             value=(target_channel.mention if target_channel else "(unknown channel)"),
         )
         
-        embed.set_footer(text="💡 Use /reminderdashboard to manage your reminders")
+        embed.set_footer(text="Whiteout Survival | Magnus")
         # If the user provided footer text/icon, override footer
         try:
             if footer_text or footer_icon_url:
-                embed.set_footer(text=footer_text or "💡 Use /reminderdashboard to manage your reminders", icon_url=footer_icon_url)
+                embed.set_footer(text="Whiteout Survival | Magnus")
         except Exception:
             pass
 
@@ -1630,9 +1573,9 @@ class ReminderSystem(commands.Cog):
             )
         
         if len(user_reminders) > 10:
-            embed.set_footer(text=f"Showing 10 of {len(user_reminders)} reminders. Use /reminderdashboard to manage them.")
+            embed.set_footer(text="Whiteout Survival | Magnus")} reminders. Use /reminderdashboard to manage them.")
         else:
-            embed.set_footer(text="💡 Use /reminderdashboard to delete or change timezone for a reminder")
+            embed.set_footer(text="Whiteout Survival | Magnus")
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
         # Send small previews for reminders that include images (up to 5)
@@ -1752,9 +1695,9 @@ class ReminderSystem(commands.Cog):
                 )
 
             if len(all_reminders) > 15:
-                embed.set_footer(text=f"Showing 15 of {len(all_reminders)} reminders. Use /reminderdashboard to manage them.")
+                embed.set_footer(text="Whiteout Survival | Magnus")} reminders. Use /reminderdashboard to manage them.")
             else:
-                embed.set_footer(text="💡 Use /reminderdashboard to delete a reminder")
+                embed.set_footer(text="Whiteout Survival | Magnus")
 
             if interaction.response.is_done():
                 await interaction.followup.send(embed=embed, ephemeral=True)

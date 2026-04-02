@@ -466,7 +466,7 @@ class BearTrap(commands.Cog):
                                     footer_text = footer_text.replace("{time}", time_text)
                                     if "@tag" in footer_text:
                                         footer_text = footer_text.replace("@tag", mention_text)
-                                    embed.set_footer(text=footer_text)
+                                    embed.set_footer(text="Whiteout Survival | Magnus")
 
                                 author_text = embed_data.get("author", "")
                                 if author_text and isinstance(author_text, str):
@@ -694,7 +694,7 @@ class BearTrap(commands.Cog):
                 color=discord.Color.gold()
             )
 
-            embed.set_footer(text="Last Updated")
+            embed.set_footer(text="Whiteout Survival | Magnus")
             embed.timestamp = datetime.now()
 
             view = BearTrapView(self)
@@ -869,7 +869,7 @@ class RepeatOptionView(discord.ui.View):
                 color=discord.Color.green()
             )
 
-            embed.set_footer(text="Created at")
+            embed.set_footer(text="Whiteout Survival | Magnus")
             embed.timestamp = datetime.now()
 
             await interaction.response.edit_message(
@@ -1102,7 +1102,7 @@ class EmbedEditorView(discord.ui.View):
                 embed.description = description
             if "footer" in self.embed_data:
                 footer = self.embed_data["footer"].replace("%t", example_time).replace("{time}", example_time)
-                embed.set_footer(text=footer)
+                embed.set_footer(text="Whiteout Survival | Magnus")
             if "author" in self.embed_data:
                 author = self.embed_data["author"].replace("%t", example_time).replace("{time}", example_time)
                 embed.set_author(name=author)
@@ -1375,7 +1375,7 @@ class MessageTypeView(discord.ui.View):
                 description="Get ready for Bear! Only %t remaining.",
                 color=discord.Color.blue()
             )
-            embed.set_footer(text="Notification System")
+            embed.set_footer(text="Whiteout Survival | Magnus")
 
             content = (
                 "📝 **Embed Editor**\n\n"
@@ -2354,7 +2354,7 @@ class BearTrapView(discord.ui.View):
                                     if embed_data['thumbnail_url']:
                                         preview_embed.set_thumbnail(url=embed_data['thumbnail_url'])
                                     if embed_data['footer']:
-                                        preview_embed.set_footer(text=embed_data['footer'])
+                                        preview_embed.set_footer(text="Whiteout Survival | Magnus")
                                     if embed_data['author']:
                                         preview_embed.set_author(name=embed_data['author'])
 

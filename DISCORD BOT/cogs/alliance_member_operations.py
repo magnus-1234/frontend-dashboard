@@ -82,7 +82,7 @@ class PaginationView(discord.ui.View):
 
     async def update_page(self, interaction: discord.Interaction):
         embed = self.chunks[self.current_page]
-        embed.set_footer(text=f"Page {self.current_page + 1}/{len(self.chunks)}")
+        embed.set_footer(text="Whiteout Survival | Magnus")}")
         await interaction.response.edit_message(embed=embed, view=self)
 
     async def on_timeout(self) -> None:
@@ -267,7 +267,7 @@ class AllianceMemberOperations(commands.Cog):
             color=discord.Color.blue()
         )
         
-        embed.set_footer(text="Select an option to continue")
+        embed.set_footer(text="Whiteout Survival | Magnus")
 
         class MemberOperationsView(discord.ui.View):
             def __init__(self, cog):
@@ -788,7 +788,7 @@ class AllianceMemberOperations(commands.Cog):
                             embed.description += member_list
                             
                             if len(member_chunks) > 1:
-                                embed.set_footer(text=f"Page {page + 1}/{len(member_chunks)}")
+                                embed.set_footer(text="Whiteout Survival | Magnus")}")
                             
                             embeds.append(embed)
 

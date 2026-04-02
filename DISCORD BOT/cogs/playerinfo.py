@@ -144,7 +144,7 @@ class PlayerInfoCog(commands.Cog):
                     description=f"```\n{self._thinking_animation.generate_binary_frame(24)}\n```\n*{self._thinking_animation.generate_status_text()}*",
                     color=0x9b59b6
                 )
-                thinking_embed.set_footer(text="Fetching player information...")
+                thinking_embed.set_footer(text="Whiteout Survival | Magnus")
                 thinking_embed.set_thumbnail(url="https://i.postimg.cc/fLLWWSKq/ezgif-278f9fa56d75db.gif")
                 thinking_msg = await message.reply(embed=thinking_embed, mention_author=False)
             except Exception as e:
