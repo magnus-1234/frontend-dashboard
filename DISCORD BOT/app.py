@@ -4178,6 +4178,7 @@ async def register_view(interaction: discord.Interaction, channel: discord.TextC
                     discord.SelectOption(label="Member List", value="memberlist", emoji="👥", description="Alliance member list view"),
                     discord.SelectOption(label="Records", value="records", emoji="📜", description="Persistent alliance records view"),
                 ]
+                logger.info(f"DEBUG: Initializing ViewTypeSelect. Options: {[o.label for o in options]}")
                 super().__init__(placeholder="Select view type...", options=options, min_values=1, max_values=1)
             
             async def callback(self, select_interaction: discord.Interaction):
