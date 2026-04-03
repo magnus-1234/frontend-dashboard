@@ -5,6 +5,13 @@ class SupportOperations(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    def _set_embed_footer(self, embed: discord.Embed, interaction: discord.Interaction):
+        """Set the personalized footer for the bot embeds."""
+        guild_name = interaction.guild.name if interaction.guild else "Whiteout Survival"
+        footer_text = f"Whiteout Survival || {guild_name} ❄️"
+        icon_url = "https://cdn.discordapp.com/attachments/1435569370389807144/1436745053442805830/unnamed_5.png"
+        embed.set_footer(text=footer_text, icon_url=icon_url)
+
     async def show_support_menu(self, interaction: discord.Interaction):
         support_menu_embed = discord.Embed(
             title="🎯 Support Operations",
@@ -20,6 +27,7 @@ class SupportOperations(commands.Cog):
             ),
             color=discord.Color.blue()
         )
+        self._set_embed_footer(support_menu_embed, interaction)
 
         view = SupportView(self, user_id=interaction.user.id)
         
@@ -42,11 +50,10 @@ class SupportOperations(commands.Cog):
                 "through our Discord or GitHub repository.\n\n"
                 "For technical support, please make sure to provide "
                 "detailed information about your problem."
-                     
-                "--BY MAGNUS" 
             ),
             color=discord.Color.blue()
         )
+        self._set_embed_footer(support_embed, interaction)
         
         try:
             await interaction.response.send_message(embed=support_embed, ephemeral=True)
@@ -112,7 +119,7 @@ class SupportView(discord.ui.View):
             color=discord.Color.green()
         )
 
-        about_embed.set_footer(text="Created by Magnus≡ƒöÑ")
+        self.cog._set_embed_footer(about_embed, interaction)
         
         try:
             await interaction.response.send_message(embed=about_embed, ephemeral=True)

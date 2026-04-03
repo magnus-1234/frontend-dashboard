@@ -325,6 +325,14 @@ class PlayerInfoCog(commands.Cog):
         except Exception as outer_e:
             self.logger.exception("Unexpected error in playerinfo handler: %s", outer_e)
 
+    def _set_embed_footer(self, embed: discord.Embed, context):
+        """Set the personalized footer for the bot embeds."""
+        guild_name = getattr(context, 'guild', None)
+        guild_name = guild_name.name if guild_name else "Whiteout Survival"
+        footer_text = f"Whiteout Survival || {guild_name} ❄️"
+        icon_url = "https://cdn.discordapp.com/attachments/1435569370389807144/1436745053442805830/unnamed_5.png"
+        embed.set_footer(text=footer_text, icon_url=icon_url)
+
     @discord.app_commands.command(
         name="playerinfo",
         description="Get player info by 9-digit player id. Accepts comma-separated list (max 30).",
@@ -415,7 +423,7 @@ class PlayerInfoCog(commands.Cog):
             embed = discord.Embed(colour=discord.Colour.blurple())
             if js is None:
                 embed.description = "No valid response from API."
-                embed.set_footer(text="Whiteout Survival | Magnus", icon_url="https://cdn.discordapp.com/attachments/1435569370389807144/1445459239131680859/images_7_1.png")
+                self._set_embed_footer(embed, interaction)
                 return embed
 
             if js.get("code") != 0:
@@ -424,11 +432,11 @@ class PlayerInfoCog(commands.Cog):
                 if ('role' in api_msg and ('not' in api_msg and ('exist' in api_msg or 'found' in api_msg))) \
                    or (('not' in api_msg) and ('exist' in api_msg or 'found' in api_msg)):
                     embed.description = "Player not found — check the 9-digit player ID and try again."
-                    embed.set_footer(text="Whiteout Survival | Magnus", icon_url="https://cdn.discordapp.com/attachments/1435569370389807144/1445459239131680859/images_7_1.png")
+                    self._set_embed_footer(embed, interaction)
                     return embed
                 else:
                     embed.description = f"API error: {api_msg_raw}"
-                    embed.set_footer(text="Whiteout Survival | Magnus", icon_url="https://cdn.discordapp.com/attachments/1435569370389807144/1445459239131680859/images_7_1.png")
+                    self._set_embed_footer(embed, interaction)
                     return embed
 
             data = js.get('data', {})
@@ -485,14 +493,7 @@ class PlayerInfoCog(commands.Cog):
             embed.add_field(name="🏠 STATE", value=state_val, inline=True)
             embed.add_field(name="Furnace Level", value=furnace_display, inline=True)
 
-            # Footer
-            try:
-                if WATERMARK_URL and _is_valid_url(WATERMARK_URL):
-                    embed.set_footer(text="Whiteout Survival | Magnus", icon_url="https://cdn.discordapp.com/attachments/1435569370389807144/1445459239131680859/images_7_1.png")
-                else:
-                    embed.set_footer(text="Whiteout Survival | Magnus", icon_url="https://cdn.discordapp.com/attachments/1435569370389807144/1445459239131680859/images_7_1.png")
-            except Exception:
-                embed.set_footer(text="Whiteout Survival | Magnus", icon_url="https://cdn.discordapp.com/attachments/1435569370389807144/1445459239131680859/images_7_1.png")
+            self._set_embed_footer(embed, interaction)
 
             return embed
 
@@ -506,7 +507,7 @@ class PlayerInfoCog(commands.Cog):
                     if exc:
                         self.logger.warning("Network error for fid=%s: %s", fid, exc)
                         embed = discord.Embed(colour=discord.Colour.blurple(), description=f"Request error: {exc}")
-                        embed.set_footer(text="Whiteout Survival | Magnus", icon_url="https://cdn.discordapp.com/attachments/1435569370389807144/1445459239131680859/images_7_1.png")
+                        self._set_embed_footer(embed, interaction)
                         await interaction.followup.send(embed=embed)
                         continue
                     # build embed from js (may be None if invalid json)

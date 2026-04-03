@@ -101,6 +101,7 @@ class AttendanceSettingsView(discord.ui.View):
                 ),
                 color=discord.Color.blue()
             )
+            self.cog._set_embed_footer(embed, interaction.guild)
             
             await interaction.response.edit_message(embed=embed, view=select_view)
             
@@ -168,6 +169,7 @@ class ReportTypeSelectView(discord.ui.View):
             ),
             color=discord.Color.blue()
         )
+        self.cog._set_embed_footer(embed, interaction.guild)
         await interaction.response.edit_message(embed=embed, view=settings_view)
 
     async def set_report_preference(self, interaction: discord.Interaction, preference: str):
@@ -180,6 +182,7 @@ class ReportTypeSelectView(discord.ui.View):
                 description=f"Report type has been set to: **{preference.title()}**",
                 color=discord.Color.green()
             )
+            self.cog._set_embed_footer(embed, interaction.guild)
             
             back_view = self.cog._create_back_view(
                 lambda i: self.cog.show_attendance_menu(i)
@@ -190,7 +193,8 @@ class ReportTypeSelectView(discord.ui.View):
         except Exception as e:
             error_embed = self.cog._create_error_embed(
                 "❌ Error", 
-                "Failed to update settings."
+                "Failed to update settings.",
+                guild=interaction.guild
             )
             await interaction.response.edit_message(embed=error_embed, view=None)
 
@@ -1572,6 +1576,14 @@ class Attendance(commands.Cog):
         self.bot = bot
         self.setup_database()
 
+    def _set_embed_footer(self, embed: discord.Embed, guild: discord.Guild = None):
+        """Sets the standardized footer for embeds with original branding."""
+        server_name = guild.name if guild else "ICE"
+        embed.set_footer(
+            text=f"Whiteout Survival || {server_name} ❄️",
+            icon_url="https://cdn.discordapp.com/attachments/1435569370389807144/1436745053442805830/unnamed_5.png"
+        )
+
     def _get_status_emoji(self, status):
         """Helper to get status emoji"""
         return {"present": "✅", "absent": "❌", "not_recorded": "⚪"}.get(status, "❓")
@@ -1591,9 +1603,11 @@ class Attendance(commands.Cog):
             last_attendance = last_attendance.replace(old, new)
         return last_attendance
 
-    def _create_error_embed(self, title, description, color=discord.Color.red()):
+    def _create_error_embed(self, title, description, color=discord.Color.red(), guild=None):
         """Helper to create error embeds"""
-        return discord.Embed(title=title, description=description, color=color)
+        embed = discord.Embed(title=title, description=description, color=color)
+        self._set_embed_footer(embed, guild)
+        return embed
 
     def _create_back_view(self, callback):
         """Helper to create back button view"""

@@ -208,6 +208,17 @@ class GiftOperations(commands.Cog):
         }
         self.session = None
 
+    def _set_embed_footer(self, embed: discord.Embed, interaction: discord.Interaction = None, guild = None):
+        """Set the personalized footer for the bot embeds."""
+        guild_obj = guild
+        if interaction:
+            guild_obj = interaction.guild
+        
+        guild_name = guild_obj.name if guild_obj else "Whiteout Survival"
+        footer_text = f"Whiteout Survival || {guild_name} ❄️"
+        icon_url = "https://cdn.discordapp.com/attachments/1435569370389807144/1436745053442805830/unnamed_5.png"
+        embed.set_footer(text=footer_text, icon_url=icon_url)
+
     async def cog_load(self):
         """Initialize aiohttp session when cog is loaded"""
         self.session = aiohttp.ClientSession()
@@ -1616,7 +1627,7 @@ class GiftOperations(commands.Cog):
                 )
             
             # Add footer
-            embed.set_footer(text="Whiteout Survival | Magnus", icon_url="https://cdn.discordapp.com/attachments/1435569370389807144/1445459239131680859/images_7_1.png")
+            self._set_embed_footer(embed, guild=channel.guild if hasattr(channel, 'guild') else None)
             
             # Send the message
             await channel.send(embed=embed)

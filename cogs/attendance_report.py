@@ -76,6 +76,14 @@ class AttendanceReport(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    def _set_embed_footer(self, embed: discord.Embed, guild: discord.Guild = None):
+        """Sets the standardized footer for embeds with original branding."""
+        server_name = guild.name if guild else "ICE"
+        embed.set_footer(
+            text=f"Whiteout Survival || {server_name} ❄️",
+            icon_url="https://cdn.discordapp.com/attachments/1435569370389807144/1436745053442805830/unnamed_5.png"
+        )
+
     def _get_status_emoji(self, status):
         """Helper to get status emoji"""
         return {"present": "✅", "absent": "❌", "not_recorded": "⚪"}.get(status, "❓")
@@ -108,9 +116,11 @@ class AttendanceReport(commands.Cog):
             # Fallback to original if parsing fails
             return date_str.split()[0] if date_str else "N/A"
 
-    def _create_error_embed(self, title, description, color=discord.Color.red()):
+    def _create_error_embed(self, title, description, color=discord.Color.red(), guild=None):
         """Helper to create error embeds"""
-        return discord.Embed(title=title, description=description, color=color)
+        embed = discord.Embed(title=title, description=description, color=color)
+        self._set_embed_footer(embed, guild)
+        return embed
 
     def _create_back_view(self, callback):
         """Helper to create back button view"""
@@ -656,6 +666,7 @@ class AttendanceReport(commands.Cog):
                 description=description_text,
                 color=discord.Color.green() if is_preview else discord.Color.blue()
             )
+            self._set_embed_footer(embed, interaction.guild)
             embed.set_image(url="attachment://attendance_report.png")
 
             # Create view based on mode
@@ -978,9 +989,11 @@ class AttendanceReport(commands.Cog):
             )
             
             if session_id:
-                embed.set_footer(text=f"Session ID: {session_id} | Sorted by Points (Highest to Lowest)")
-            else:
-                embed.set_footer(text="Sorted by Points (Highest to Lowest)")
+                # Use session_id in description instead of footer for cleaner look if needed, 
+                # but here we follow the prompt's branding first.
+                pass
+            
+            self._set_embed_footer(embed, interaction.guild)
             
             # Create view with back and export buttons
             view = discord.ui.View(timeout=7200)
@@ -1087,6 +1100,7 @@ class AttendanceReport(commands.Cog):
                     description=f"❌ **No attendance sessions found for {alliance_name}.**\n\nTo create attendance records, use the 'Mark Attendance' option from the main menu.",
                     color=discord.Color.orange()
                 )
+                self._set_embed_footer(embed, interaction.guild)
                 
                 # Add back button
                 back_view = discord.ui.View(timeout=7200)
@@ -1127,6 +1141,7 @@ class AttendanceReport(commands.Cog):
                 description="Please select a session to view attendance records:",
                 color=discord.Color.blue()
             )
+            self._set_embed_footer(embed, interaction.guild)
             
             if interaction.response.is_done():
                 await interaction.edit_original_response(embed=embed, view=view, attachments=[])
