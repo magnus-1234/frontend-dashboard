@@ -39,6 +39,78 @@ def build_codes_embed(codes):
     embed.set_footer(text="Use the buttons below to copy codes or refresh the list.")
     return embed
 
+class WosToolsScraper:
+    """Scraper for https://wostools.net/api/gift-codes — fast JSON API."""
+
+    API_URL = "https://wostools.net/api/gift-codes"
+
+    def __init__(self):
+        self.headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        self.cache_data = None
+        self.last_fetched = None
+        self.cache_duration = timedelta(minutes=5)  # Shorter cache — API is fast
+
+    async def fetch_gift_codes(self):
+        """
+        Fetch active gift codes from wostools.net JSON API.
+        Returns list of code dicts with keys: code, rewards, expiry, is_active
+        """
+        # Return cached result if still valid
+        if self.cache_data and self.last_fetched:
+            if datetime.now() - self.last_fetched < self.cache_duration:
+                logger.debug("WosTools: returning cached gift codes")
+                return self.cache_data
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    self.API_URL,
+                    headers=self.headers,
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as response:
+                    if response.status != 200:
+                        logger.warning(f"WosTools API returned status {response.status}")
+                        return []
+
+                    data = await response.json(content_type=None)
+
+                    if not data.get('success'):
+                        logger.warning("WosTools API returned success=false")
+                        return []
+
+                    codes = []
+                    for item in data.get('codes', []):
+                        if item.get('status') != 'active':
+                            continue
+                        code_str = item.get('code', '').strip()
+                        if not code_str:
+                            continue
+                        date_added = item.get('dateAdded', '')
+                        codes.append({
+                            'code': code_str,
+                            'description': '',
+                            'rewards': 'Rewards not specified',
+                            'expiry': 'Unknown',
+                            'is_active': True,
+                            'source': 'wostools',
+                            'date_added': date_added,
+                        })
+
+                    logger.info(f"WosTools API: fetched {len(codes)} active codes")
+                    self.cache_data = codes
+                    self.last_fetched = datetime.now()
+                    return codes
+
+        except asyncio.TimeoutError:
+            logger.warning("WosTools API: request timed out")
+            return self.cache_data or []
+        except Exception as e:
+            logger.error(f"WosTools API error: {e}")
+            return self.cache_data or []
+
+
 class GiftCodeScraper:
     def __init__(self):
         self.url = "https://wosgiftcodes.com/"
@@ -427,30 +499,75 @@ class GiftCodeScraper:
         logger.info(f"Using fallback codes: {len(fallback_codes)} codes")
         return fallback_codes
 
-# Global instance
+# Global instances
 gift_code_scraper = GiftCodeScraper()
+wostools_scraper = WosToolsScraper()
 
 async def get_active_gift_codes():
     """
-    Public function to get active gift codes
-    Returns list of active codes or None if error
+    Public function to get active gift codes.
+    Aggregates from multiple sources concurrently:
+      1. wostools.net JSON API  (fast, no parsing needed)
+      2. wosgiftcodes.com       (HTML scrape, fallback)
+    Results are deduplicated by code string (case-insensitive).
+    Returns list of active code dicts, or empty list on error.
     """
-    result = await gift_code_scraper.fetch_gift_codes()
-    if result:
-        active_codes = result.get('active_codes', [])
-        filtered_active_codes = []
+    # Run both scrapers concurrently
+    wostools_task = asyncio.create_task(wostools_scraper.fetch_gift_codes())
+    wosgift_task = asyncio.create_task(gift_code_scraper.fetch_gift_codes())
+
+    wostools_codes, wosgift_result = await asyncio.gather(
+        wostools_task, wosgift_task, return_exceptions=True
+    )
+
+    # Handle exceptions from gather
+    if isinstance(wostools_codes, Exception):
+        logger.error(f"WosTools scraper exception: {wostools_codes}")
+        wostools_codes = []
+    if isinstance(wosgift_result, Exception):
+        logger.error(f"WosGiftCodes scraper exception: {wosgift_result}")
+        wosgift_result = None
+
+    # Extract active codes from wosgiftcodes.com result
+    wosgift_codes = []
+    if wosgift_result and isinstance(wosgift_result, dict):
         now = datetime.now()
-        for code in active_codes:
+        for code in wosgift_result.get('active_codes', []):
             expiry_str = code.get('expiry', 'Unknown')
             try:
                 expiry_date = dateutil.parser.parse(expiry_str, fuzzy=True)
                 if expiry_date > now:
-                    filtered_active_codes.append(code)
+                    wosgift_codes.append(code)
             except Exception:
-                # If expiry date cannot be parsed, assume active
-                filtered_active_codes.append(code)
-        return filtered_active_codes
-    return None
+                wosgift_codes.append(code)  # Assume active if unparseable
+
+    # Merge: start with WosTools (faster/more authoritative), then
+    # add any extra codes from wosgiftcodes.com not already present
+    seen = set()
+    merged = []
+
+    for code_dict in (wostools_codes or []):
+        key = code_dict.get('code', '').strip().upper()
+        if key and key not in seen:
+            seen.add(key)
+            merged.append(code_dict)
+
+    for code_dict in wosgift_codes:
+        key = code_dict.get('code', '').strip().upper()
+        if key and key not in seen:
+            seen.add(key)
+            merged.append(code_dict)
+
+    if merged:
+        logger.info(
+            f"get_active_gift_codes: {len(merged)} unique active codes "
+            f"({len(wostools_codes or [])} from WosTools, "
+            f"{len(wosgift_codes)} from WosGiftCodes)"
+        )
+    else:
+        logger.warning("get_active_gift_codes: no active codes found from any source")
+
+    return merged if merged else []
 
 async def get_all_gift_codes():
     """
