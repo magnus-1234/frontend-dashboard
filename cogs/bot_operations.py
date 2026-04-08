@@ -30,6 +30,24 @@ class BotOperations(commands.Cog):
         self.c_alliance = self.alliance_db.cursor()
         self.setup_database()
 
+    @commands.Cog.listener()
+    async def on_ready(self):
+        import json
+        import os
+        state_file = 'db/restart_state.json'
+        if os.path.exists(state_file):
+            try:
+                with open(state_file, 'r') as f:
+                    data = json.load(f)
+                channel = self.bot.get_channel(data.get('channel_id'))
+                if channel:
+                    msg = await channel.fetch_message(data.get('message_id'))
+                    if msg:
+                        await msg.edit(content="✅ **Restart complete!** The bot is now online and operational.")
+                os.remove(state_file)
+            except Exception as e:
+                print(f"Error handling restart state: {e}")
+
     def _set_embed_footer(self, embed: discord.Embed, guild: Union[discord.Guild, None] = None):
         """Sets the standardized footer for embeds with original branding."""
         server_name = guild.name if guild else "Magnus"
@@ -5453,6 +5471,18 @@ class BotOperations(commands.Cog):
                     return
                     
                 await interaction.response.send_message("🔄 Restarting bot... Please wait.", ephemeral=False)
+                
+                try:
+                    msg = await interaction.original_response()
+                    if msg:
+                        import json
+                        import os
+                        os.makedirs('db', exist_ok=True)
+                        with open('db/restart_state.json', 'w') as f:
+                            json.dump({'channel_id': msg.channel.id, 'message_id': msg.id}, f)
+                except Exception as ex:
+                    print(f"Failed to fetch original response for restart: {ex}")
+                    
                 import sys
                 sys.exit(0)
             except Exception as e:
