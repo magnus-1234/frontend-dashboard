@@ -5440,6 +5440,52 @@ class BotOperations(commands.Cog):
                         ephemeral=True
                     )
 
+        elif custom_id == "restart_bot":
+            try:
+                self.settings_cursor.execute("SELECT is_initial FROM admin WHERE id = ?", (interaction.user.id,))
+                result = self.settings_cursor.fetchone()
+                
+                if (not result or result[0] != 1) and not await is_bot_owner(self.bot, interaction.user.id):
+                    await interaction.response.send_message(
+                        "❌ Only global administrators can use this command.", 
+                        ephemeral=True
+                    )
+                    return
+                    
+                await interaction.response.send_message("🔄 Restarting bot... Please wait.", ephemeral=False)
+                import sys
+                sys.exit(0)
+            except Exception as e:
+                print(f"Restart bot error: {e}")
+
+        elif custom_id == "power_off_bot":
+            try:
+                self.settings_cursor.execute("SELECT is_initial FROM admin WHERE id = ?", (interaction.user.id,))
+                result = self.settings_cursor.fetchone()
+                
+                if (not result or result[0] != 1) and not await is_bot_owner(self.bot, interaction.user.id):
+                    await interaction.response.send_message(
+                        "❌ Only global administrators can use this command.", 
+                        ephemeral=True
+                    )
+                    return
+                    
+                class PowerOffConfirm(discord.ui.View):
+                    def __init__(self):
+                        super().__init__(timeout=60)
+                    @discord.ui.button(label="Confirm Power Off", style=discord.ButtonStyle.danger, emoji="⚠️")
+                    async def confirm(self, btn_interaction: discord.Interaction, button: discord.ui.Button):
+                        await btn_interaction.response.send_message("🛑 Powering off bot... (Note: You must manually start it from SSH)", ephemeral=False)
+                        import os
+                        os.system("pm2 stop discordbot")
+                    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+                    async def cancel(self, btn_interaction: discord.Interaction, button: discord.ui.Button):
+                        await btn_interaction.response.send_message("Power off cancelled.", ephemeral=True)
+                        
+                await interaction.response.send_message("⚠️ **WARNING:** If you power off the bot, it will go offline and you CANNOT restart it from Discord. Are you sure?", view=PowerOffConfirm(), ephemeral=True)
+            except Exception as e:
+                print(f"Power off bot error: {e}")
+
     async def show_bot_operations_menu(self, interaction: discord.Interaction):
         try:
             embed = discord.Embed(
@@ -5448,6 +5494,8 @@ class BotOperations(commands.Cog):
                     "Please choose an operation:\n\n"
                     "**Available Operations**\n"
                     "━━━━━━━━━━━━━━━━━━━━━━\n"
+                    "⚡ **Power Management**\n"
+                    "└ Restart or power off the bot\n\n"
                     "👥 **Admin Management**\n"
                     "└ Manage bot administrators\n\n"
                     "🔍 **Admin Permissions**\n"
@@ -5462,6 +5510,20 @@ class BotOperations(commands.Cog):
             )
             
             view = discord.ui.View()
+            view.add_item(discord.ui.Button(
+                label="Restart Bot",
+                emoji="🔄",
+                style=discord.ButtonStyle.danger,
+                custom_id="restart_bot",
+                row=0
+            ))
+            view.add_item(discord.ui.Button(
+                label="Power Off Bot",
+                emoji="🛑",
+                style=discord.ButtonStyle.danger,
+                custom_id="power_off_bot",
+                row=0
+            ))
             view.add_item(discord.ui.Button(
                 label="Add Admin",
                 emoji="➕",
