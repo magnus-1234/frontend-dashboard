@@ -1440,7 +1440,7 @@ class AutoRedeemMembersAdapter:
         clients_seen = set()
         
         def add_db(db):
-            if db:
+            if db is not None:
                 key = (db.client.address, db.name)
                 if key not in clients_seen:
                     db_list.append(db)
@@ -1544,7 +1544,7 @@ class AutoRedeemMembersAdapter:
         clients_seen = set()
         
         def add_db(db):
-            if db:
+            if db is not None:
                 key = (db.client.address, db.name)
                 if key not in clients_seen:
                     db_list.append(db)
@@ -1576,7 +1576,7 @@ class AutoRedeemMembersAdapter:
         clients_seen = set()
         
         async def add_db_async(db):
-            if db:
+            if db is not None:
                 key = (db.client.address, db.name)
                 if key not in clients_seen:
                     db_list.append(db)
@@ -1594,14 +1594,18 @@ class AutoRedeemMembersAdapter:
         try:
             db_main = await _get_db_main_async()
             await add_db_async(db_main)
-        except Exception:
-            pass
-            
+        except Exception as e:
+            logger.error(f"Error adding db_main_async: {e}")
+            import traceback
+            traceback.print_exc()
+
         try:
             db_wos = await _get_db_wos_async()
             await add_db_async(db_wos)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Error adding db_wos_async: {e}")
+            import traceback
+            traceback.print_exc()
             
         return db_list
 

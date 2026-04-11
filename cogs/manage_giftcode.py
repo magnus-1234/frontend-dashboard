@@ -1439,11 +1439,10 @@ class ManageGiftCode(commands.Cog):
                     self.logger.error(f"Error tracking redemption: {e}")
             
             # Return results
-            # Treat TIME_ERROR, EXPIRED, and USAGE_LIMIT as "already redeemed" since:
+            # Treat TIME_ERROR, EXPIRED, and USAGE_LIMIT as failed
             # - TIME_ERROR: Code has expired (redemption window passed)
             # - EXPIRED: Code is no longer valid
             # - USAGE_LIMIT: Code has been fully used up
-            # These aren't failures - they just mean the code is no longer available
             expired_statuses = {
                 "TIME_ERROR", "EXPIRED", "USAGE_LIMIT", "CDK_NOT_FOUND",
                 "UNKNOWN_STATUS_TIME ERROR", "UNKNOWN_STATUS_CDK NOT FOUND",
@@ -1451,8 +1450,8 @@ class ManageGiftCode(commands.Cog):
             }
             
             success = 1 if redemption_successful else 0
-            already_redeemed = 1 if final_status == "ALREADY_RECEIVED" or final_status in expired_statuses else 0
-            failed = 1 if not redemption_successful and final_status != "ALREADY_RECEIVED" and final_status not in expired_statuses else 0
+            already_redeemed = 1 if final_status == "ALREADY_RECEIVED" else 0
+            failed = 1 if not redemption_successful and final_status != "ALREADY_RECEIVED" else 0
             
             return (final_status, success, already_redeemed, failed)
             
@@ -1678,25 +1677,40 @@ class ManageGiftCode(commands.Cog):
             completed_count = 0
             progress_lock = asyncio.Lock()
             
+            # Lock to stop processing if the code proves invalid globally
+            code_is_invalid = False
+            
             # Semaphore to limit concurrent redemptions
             semaphore = asyncio.Semaphore(self.concurrent_redemptions)
             
             async def process_member_with_semaphore(idx, fid, nickname, furnace_lv):
                 """Process a single member with semaphore control"""
-                nonlocal success_count, failed_count, already_redeemed_count, completed_count
+                nonlocal success_count, failed_count, already_redeemed_count, completed_count, code_is_invalid
                 
                 # Check for stop signal
-                if self.stop_signals.get(guild_id):
+                if self.stop_signals.get(guild_id) or code_is_invalid:
+                    async with progress_lock:
+                        failed_count += 1
+                        completed_count += 1
                     return
                 
                 async with semaphore:
                     # Double check after acquiring semaphore
-                    if self.stop_signals.get(guild_id):
+                    if self.stop_signals.get(guild_id) or code_is_invalid:
+                        async with progress_lock:
+                            failed_count += 1
+                            completed_count += 1
                         return
                     # Process the member
                     status, success, already_redeemed, failed = await self._redeem_for_member(
                         guild_id, fid, nickname, furnace_lv, code_up
                     )
+                    
+                    # If status is permanently invalid for everyone, abort early
+                    if status in ["INVALID_CODE", "EXPIRED", "CDK_NOT_FOUND", "TIME_ERROR", "USAGE_LIMIT"]:
+                        if not code_is_invalid:
+                            self.logger.warning(f"🚫 Code {code_up} is globally invalid ({status})! Aborting remaining members in guild {guild_id}")
+                            code_is_invalid = True
                     
                     # Update counters
                     async with progress_lock:
@@ -2400,13 +2414,14 @@ class ManageGiftCode(commands.Cog):
             
             # Add new codes to database with auto_redeem_processed = 0
             for code, date in new_codes:
+                code_up = str(code).upper()
                 try:
                     # Insert into SQLite
                     self.cursor.execute(
                         "INSERT OR IGNORE INTO gift_codes (giftcode, date, validation_status, added_at, auto_redeem_processed) VALUES (?, ?, ?, ?, ?)",
-                        (code, date, "validated", datetime.now(), 0)
+                        (code_up, date, "validated", datetime.now(), 0)
                     )
-                    self.logger.info(f"Added new code to SQLite: {code}")
+                    self.logger.info(f"Added new code to SQLite: {code_up}")
                     
                     # CRITICAL: Also insert into MongoDB if enabled
                     if mongo_enabled() and GiftCodesAdapter and _get_db:
@@ -2415,7 +2430,7 @@ class ManageGiftCode(commands.Cog):
                             db = _get_db()
                             if db:
                                 db[GiftCodesAdapter.COLL].update_one(
-                                    {'_id': code},
+                                    {'_id': code_up},
                                     {
                                         '$set': {
                                             'date': date,
@@ -2776,7 +2791,8 @@ class ManageGiftCode(commands.Cog):
         """Notify global administrators about new gift codes"""
         try:
             # Trigger auto-redeem for all guilds that have it enabled
-            await self.trigger_auto_redeem_for_new_codes(new_codes)
+            # Setup as a background task to avoid blocking the DM notification logic and API checkers
+            asyncio.create_task(self.trigger_auto_redeem_for_new_codes(new_codes))
 
             # Trigger immediate auto-posting to configured channels
             try:
