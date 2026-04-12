@@ -794,89 +794,141 @@ class RemoteAccess(commands.Cog):
 
 
     async def send_message(self, interaction: discord.Interaction, guild: discord.Guild):
-        """Send a message to any channel in the server"""
+        """Send a message to any channel in the server — paginated to bypass 25-option limit"""
         try:
             # Get all text channels where bot can send messages
-            channels = [
-                c for c in guild.text_channels
-                if c.permissions_for(guild.me).send_messages
-            ]
-            
-            if not channels:
+            all_channels = sorted(
+                [c for c in guild.text_channels if c.permissions_for(guild.me).send_messages],
+                key=lambda c: c.position
+            )
+
+            if not all_channels:
                 await interaction.response.send_message(
                     "❌ No accessible text channels found in this server where I can send messages.",
                     ephemeral=True
                 )
                 return
-            
-            # Create channel selection dropdown
-            options = [
-                discord.SelectOption(
-                    label=f"{channel.name[:90]}",
-                    value=str(channel.id),
-                    description=f"Category: {channel.category.name if channel.category else 'None'} • {channel.topic[:50] if channel.topic else 'No topic'}",
-                    emoji="📝"
-                )
-                for channel in sorted(channels, key=lambda c: c.position)[:25]
-            ]
-            
-            select = discord.ui.Select(
-                placeholder="Select a channel to send message...",
-                options=options,
-                custom_id="select_channel_for_message"
-            )
-            
-            async def channel_selected(select_interaction: discord.Interaction):
-                channel_id = int(select_interaction.data["values"][0])
-                channel = guild.get_channel(channel_id)
-                
-                if not channel:
-                    await select_interaction.response.send_message(
-                        "❌ Channel not found.",
-                        ephemeral=True
-                    )
-                    return
-                
-                # Show message type selection
-                await self.show_message_type_selection(select_interaction, channel, guild)
-            
-            select.callback = channel_selected
-            
-            view = discord.ui.View(timeout=300)
-            view.add_item(select)
-            
-            # Back button
-            back_button = discord.ui.Button(
-                label="◀ Back",
-                emoji="🏰",
-                style=discord.ButtonStyle.secondary
-            )
-            back_button.callback = lambda i: self.show_server_management(i, guild)
-            view.add_item(back_button)
-            
-            embed = discord.Embed(
-                title=f"📨 Send Message in {guild.name}",
-                description=(
-                    "**Select a channel to send a message**\n\n"
-                    "You'll be able to:\n"
-                    "• Send plain text messages\n"
-                    "• Create rich embeds\n"
-                    "• Send messages with custom formatting\n\n"
-                    "Select a channel from the dropdown below."
-                ),
-                color=0x57F287
-            )
-            
-            await interaction.response.edit_message(embed=embed, view=view)
-            
+
+            await self._show_channel_page(interaction, guild, all_channels, page=0)
+
         except Exception as e:
             print(f"Send message error: {e}")
             import traceback
             traceback.print_exc()
-            await interaction.response.send_message(
-                "❌ An error occurred while preparing to send message.",
-                ephemeral=True
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    "❌ An error occurred while preparing to send message.",
+                    ephemeral=True
+                )
+
+    async def _show_channel_page(
+        self,
+        interaction: discord.Interaction,
+        guild: discord.Guild,
+        all_channels: list,
+        page: int = 0
+    ):
+        """Render one page of the paginated channel picker for Send Message."""
+        PAGE_SIZE = 23  # leave room for prev/next/back buttons in the view
+        total_pages = max(1, (len(all_channels) + PAGE_SIZE - 1) // PAGE_SIZE)
+        page = max(0, min(page, total_pages - 1))
+
+        page_channels = all_channels[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
+
+        options = [
+            discord.SelectOption(
+                label=channel.name[:90],
+                value=str(channel.id),
+                description=(
+                    f"{'#' + channel.category.name if channel.category else 'No category'}"
+                    + (f" • {channel.topic[:40]}" if channel.topic else "")
+                )[:100],
+                emoji="📝"
             )
+            for channel in page_channels
+        ]
+
+        select = discord.ui.Select(
+            placeholder=f"Select a channel… (page {page+1}/{total_pages})",
+            options=options,
+            custom_id="select_channel_for_message"
+        )
+
+        async def channel_selected(sel_int: discord.Interaction):
+            channel_id = int(sel_int.data["values"][0])
+            channel = guild.get_channel(channel_id)
+            if not channel:
+                await sel_int.response.send_message("❌ Channel not found.", ephemeral=True)
+                return
+            await self.show_message_type_selection(sel_int, channel, guild)
+
+        select.callback = channel_selected
+
+        view = discord.ui.View(timeout=300)
+        view.add_item(select)
+
+        # Prev page button
+        prev_btn = discord.ui.Button(
+            label="◀ Prev",
+            style=discord.ButtonStyle.secondary,
+            disabled=(page == 0),
+            row=1
+        )
+        async def go_prev(btn_int: discord.Interaction):
+            await self._show_channel_page(btn_int, guild, all_channels, page - 1)
+        prev_btn.callback = go_prev
+        view.add_item(prev_btn)
+
+        # Page counter (disabled label button)
+        counter_btn = discord.ui.Button(
+            label=f"Page {page+1} / {total_pages}  ({len(all_channels)} channels)",
+            style=discord.ButtonStyle.secondary,
+            disabled=True,
+            row=1
+        )
+        view.add_item(counter_btn)
+
+        # Next page button
+        next_btn = discord.ui.Button(
+            label="Next ▶",
+            style=discord.ButtonStyle.secondary,
+            disabled=(page >= total_pages - 1),
+            row=1
+        )
+        async def go_next(btn_int: discord.Interaction):
+            await self._show_channel_page(btn_int, guild, all_channels, page + 1)
+        next_btn.callback = go_next
+        view.add_item(next_btn)
+
+        # Back to server management
+        back_btn = discord.ui.Button(
+            label="◀ Back",
+            emoji="🏰",
+            style=discord.ButtonStyle.secondary,
+            row=2
+        )
+        back_btn.callback = lambda i: self.show_server_management(i, guild)
+        view.add_item(back_btn)
+
+        embed = discord.Embed(
+            title=f"📨 Send Message in {guild.name}",
+            description=(
+                "**Select a channel to send a message**\n\n"
+                "You'll be able to:\n"
+                "• Send plain text messages\n"
+                "• Create rich embeds\n"
+                "• Send messages with custom formatting\n\n"
+                f"Showing **{len(page_channels)}** of **{len(all_channels)}** channels "
+                f"(page {page+1}/{total_pages}).\n"
+                "Use the ◀ Prev / Next ▶ buttons to browse all channels."
+            ),
+            color=0x57F287
+        )
+
+        if interaction.response.is_done():
+            await interaction.edit_original_response(embed=embed, view=view)
+        else:
+            await interaction.response.edit_message(embed=embed, view=view)
 
     async def show_message_type_selection(self, interaction: discord.Interaction, channel: discord.TextChannel, guild: discord.Guild):
         """Show message type selection (plain text or embed)"""
