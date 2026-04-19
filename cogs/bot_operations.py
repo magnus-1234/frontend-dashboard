@@ -5342,8 +5342,7 @@ class BotOperations(commands.Cog):
                                 async def on_submit(self, modal_int: discord.Interaction):
                                     try:
                                         prio = int(self.priority.value.strip())
-                                        from db.mongo_adapters import AutoRedeemSettingsAdapter
-                                        from config import mongo_enabled
+                                        from db.mongo_adapters import AutoRedeemSettingsAdapter, mongo_enabled
                                         from db_utils import get_db_connection
                                         
                                         if mongo_enabled() and AutoRedeemSettingsAdapter and hasattr(AutoRedeemSettingsAdapter, 'set_priority'):
@@ -5426,8 +5425,7 @@ class BotOperations(commands.Cog):
                             gid = int(self.guild_id.value.strip())
                             prio = int(self.priority.value.strip())
                             
-                            from db.mongo_adapters import AutoRedeemSettingsAdapter
-                            from config import mongo_enabled
+                            from db.mongo_adapters import AutoRedeemSettingsAdapter, mongo_enabled
                             from db_utils import get_db_connection
                             
                             # MongoDB
