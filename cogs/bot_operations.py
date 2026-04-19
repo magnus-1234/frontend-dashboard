@@ -6779,11 +6779,7 @@ class PersistentRecordDetailView(discord.ui.View):
         
         embed = discord.Embed(
             title=f"📁 Record: {self.record_name}",
-            description=(
-                f"Viewing participants and data for the **{self.record_name}** group.\n\n"
-                "**Group Participants:**\n"
-                "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            ),
+            description=f"Viewing participants and data for the **{self.record_name}** group.\n\n",
             color=0x5865F2
         )
         
@@ -6796,6 +6792,29 @@ class PersistentRecordDetailView(discord.ui.View):
         start_idx = self.current_page * self.members_per_page
         end_idx = start_idx + self.members_per_page
         page_members = members[start_idx:end_idx]
+        
+        # Calculate Statistics for the box
+        furnace_levels = [int(m.get('furnace_lv', 0) or 0) for m in members]
+        max_fl = max(furnace_levels) if furnace_levels else 0
+        avg_fl = sum(furnace_levels) / len(furnace_levels) if furnace_levels else 0
+        
+        # Get mapped levels for stats
+        max_fl_display = self.level_mapping.get(max_fl, str(max_fl))
+        avg_fl_display = self.level_mapping.get(int(round(avg_fl)), str(round(avg_fl, 1)))
+        
+        stats_box = (
+            "```ml\n"
+            "Group Statistics\n"
+            "══════════════════════════\n"
+            f"👥 Total Members    : {len(members)}\n"
+            f"⚔️ Highest FC Level  : {max_fl_display}\n"
+            f"📈 Average FC Level  : {avg_fl_display}\n"
+            "══════════════════════════\n"
+            "```\n"
+        )
+        
+        embed.description += stats_box
+        embed.description += "**Group Participants:**\n━━━━━━━━━━━━━━━━━━━━━━\n\n"
         
         if page_members:
             member_list = ""
