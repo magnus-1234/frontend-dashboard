@@ -646,7 +646,17 @@ class Alliance(commands.Cog):
                     pass
 
             # Skip interactions handled by BotOperations to avoid collisions
-            if custom_id == "records_menu" or (custom_id and custom_id.startswith("record_")):
+            BOT_OPERATIONS_IDS = {
+                "records_menu", "manage_member_ops", "manage_alliance_monitor",
+                "manage_other_features", "manage_welcome", "players_timezone",
+                "set_player_timezone", "timezone_view_members", "return_to_manage",
+                "giftcode_menu", "bot_operations",
+            }
+            if custom_id in BOT_OPERATIONS_IDS or (custom_id and (
+                custom_id.startswith("record_") or
+                custom_id.startswith("giftcode") or
+                custom_id.startswith("manage_")
+            )):
                 return
             
             # Use helper method with automatic fallback
