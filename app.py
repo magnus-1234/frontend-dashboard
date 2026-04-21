@@ -3062,7 +3062,7 @@ async def reminderdashboard(interaction: discord.Interaction):
 @bot.tree.command(name="giftcodesettings", description="Open interactive gift code settings dashboard for this server")
 @app_commands.default_permissions(administrator=True)
 async def giftcodesettings(interaction: discord.Interaction):
-    await interaction.response.defer()
+    await interaction.response.defer(ephemeral=True)
     await animator.show_loading(interaction)
     try:
         if not interaction.guild:
@@ -3087,7 +3087,7 @@ async def giftcodesettings(interaction: discord.Interaction):
             header.add_field(name="Configured Channel", value="Not configured", inline=False)
 
         await animator.stop_loading(interaction, delete=True)
-        await interaction.followup.send(embed=header, view=view)
+        await interaction.followup.send(embed=header, view=view, ephemeral=True)
 
     except Exception as e:
         logger.error(f"Error in giftcodesettings command: {e}")

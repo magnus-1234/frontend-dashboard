@@ -686,15 +686,20 @@ async def run_check_once(bot: discord.Client):
                 logger.info(f"Guild {guild_id} ({guild.name}): sent_set has {len(sent_set)} codes")
                 
                 # If this guild has no recorded sent codes (e.g. newly configured),
-                # avoid blasting all current codes as "new".
-                # Instead, mark the currently fetched codes as sent and skip posting on this run.
+                # post the CURRENT active codes immediately (so the channel gets seeded
+                # with the latest codes right away), then mark them as sent.
                 if not sent_set:
-                    try:
-                        # mark fetched codes as sent for this guild to avoid reposts
-                        await poster.mark_sent(guild_id, list(fetched_set))
-                        logger.info(f"Initialising sent set for guild {guild_id} with {len(fetched_set)} current codes (no post)")
-                    except Exception as e:
-                        logger.error(f"Failed to initialize sent set for guild {guild_id}: {e}")
+                    if fetched_set:
+                        logger.info(f"New guild {guild_id} ({guild.name}): posting {len(fetched_set)} current codes on first run")
+                        try:
+                            new_code_dicts = [code_map[k] for k in fetched_codes if k in code_map]
+                            await post_new_codes_to_channel(bot, channel, new_code_dicts)
+                            await poster.mark_sent(guild_id, list(fetched_set))
+                            posted_total += len(fetched_set)
+                        except Exception as e:
+                            logger.error(f"Failed to post initial codes for guild {guild_id}: {e}")
+                            # Still mark as sent to avoid spamming on next cycle
+                            await poster.mark_sent(guild_id, list(fetched_set))
                     continue
 
                 # fetched_codes and sent_set are normalized already
