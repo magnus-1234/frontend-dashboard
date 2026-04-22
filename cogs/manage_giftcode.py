@@ -439,9 +439,51 @@ class ManageGiftCode(commands.Cog):
             return
 
         if not fid:
+            # Add diagnostic checks to tell the user WHY it might fail to start
+            status_msg = await ctx.send(f"🧪 Verifying configuration for guild before full auto-redeem test...")
+            
+            enabled = False
+            if mongo_enabled() and AutoRedeemSettingsAdapter:
+                settings = await AutoRedeemSettingsAdapter.get_settings_async(ctx.guild.id)
+                if settings:
+                    enabled = settings.get('enabled', False)
+            if not enabled and (not mongo_enabled() or not AutoRedeemSettingsAdapter):
+                self.cursor.execute("SELECT enabled FROM auto_redeem_settings WHERE guild_id = ?", (ctx.guild.id,))
+                result = self.cursor.fetchone()
+                enabled = result[0] == 1 if result else False
+                
+            if not enabled:
+                await status_msg.edit(content="❌ **Auto-redeem is disabled for this server.** Please enable it first using the auto-redeem manage menu.")
+                return
+                
+            channel_id = None
+            if mongo_enabled() and AutoRedeemChannelsAdapter:
+                channel_config = await AutoRedeemChannelsAdapter.get_channel_async(ctx.guild.id)
+                if channel_config:
+                    channel_id = channel_config.get('channel_id')
+            if channel_id is None:
+                self.cursor.execute("SELECT channel_id FROM auto_redeem_channels WHERE guild_id = ?", (ctx.guild.id,))
+                channel_result = self.cursor.fetchone()
+                if channel_result:
+                    channel_id = channel_result[0]
+                    
+            if not channel_id:
+                await status_msg.edit(content="❌ **No Auto-Redeem channel configured.** Please set an import channel first.")
+                return
+                
+            channel = self.bot.get_channel(channel_id)
+            if not channel:
+                await status_msg.edit(content=f"❌ **Configured Auto-Redeem channel (<#{channel_id}>) not found.** It may have been deleted or the bot lacks access.")
+                return
+                
+            members_data = await self.AutoRedeemDB.get_members_async(self, ctx.guild.id)
+            if not members_data:
+                await status_msg.edit(content="❌ **No members configured for Auto-Redeem.** Please add members first.")
+                return
+
             # If no FID is provided, run the full auto-redeem process for the guild
-            await ctx.send(f"🧪 Starting full auto-redeem test for guild with code: `{code}`...")
-            await self.process_auto_redeem(ctx.guild.id, code)
+            await status_msg.edit(content=f"✅ Configuration verified. Launching full auto-redeem test in <#{channel_id}> with code: `{code}`...")
+            await self.process_auto_redeem(ctx.guild.id, code, is_recheck=True)
             return
 
         # Validate and clean FID input
