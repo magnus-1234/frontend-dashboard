@@ -751,30 +751,6 @@ class BirthdaySystem(commands.Cog):
             
             logger.info(f"🎂 Checking birthdays for {today_month}/{today_day}")
             
-            # Get birthday channel ID (per-guild or env fallback)
-            # Note: Using guild ID from first birthday user's guild, or None if no users
-            # This is a limitation - ideally we'd store guild_id with each birthday
-            birthday_channel_id = None
-            if self.birthdays_cache:
-                # Try to get guild from bot's guilds
-                for guild in self.bot.guilds:
-                    birthday_channel_id = self.get_birthday_channel(guild.id)
-                    if birthday_channel_id:
-                        break
-            
-            if not birthday_channel_id:
-                logger.warning("⚠️ No birthday channel configured for any guild")
-                return
-            
-            try:
-                channel = self.bot.get_channel(int(birthday_channel_id))
-                if not channel:
-                    logger.warning(f"⚠️ Birthday channel {birthday_channel_id} not found")
-                    return
-            except Exception as e:
-                logger.error(f"❌ Failed to get birthday channel: {e}")
-                return
-            
             # Reload birthdays and sent wishes to get latest data
             self.load_birthdays()
             self.load_sent_wishes()
@@ -794,7 +770,15 @@ class BirthdaySystem(commands.Cog):
                             logger.debug(f"⏭️ Skipping user {user_id} - wish already sent today")
                             continue
                         
-                        user = await self.bot.fetch_user(user_id)
+                        # Try to use get_user to avoid unnecessary API calls
+                        user = self.bot.get_user(user_id)
+                        if not user:
+                            try:
+                                user = await self.bot.fetch_user(user_id)
+                            except discord.NotFound:
+                                logger.warning(f"⚠️ User {user_id} not found on Discord.")
+                                continue
+                                
                         if user:
                             birthday_users.append(user)
                     except Exception as e:
@@ -804,16 +788,43 @@ class BirthdaySystem(commands.Cog):
             if skipped_users:
                 logger.info(f"⏭️ Skipped {len(skipped_users)} user(s) - wishes already sent today")
             
-            # Send birthday wishes
-            if birthday_users:
-                await self.send_birthday_wishes(channel, birthday_users)
-                # Mark wishes as sent
-                for user in birthday_users:
-                    self.mark_wish_sent(user.id)
-                logger.info(f"🎉 Sent birthday wishes for {len(birthday_users)} user(s)")
-            else:
+            if not birthday_users:
                 if not skipped_users:
                     logger.info("📅 No birthdays today")
+                return
+
+            wishes_sent_to_anyone = False
+
+            # For each guild the bot is in, check if it has a birthday channel
+            for guild in self.bot.guilds:
+                birthday_channel_id = self.get_birthday_channel(guild.id)
+                if not birthday_channel_id:
+                    continue
+                    
+                channel = guild.get_channel(int(birthday_channel_id))
+                if not channel:
+                    continue
+                    
+                # Find which birthday users are in this guild
+                guild_birthday_users = []
+                for user in birthday_users:
+                    member = guild.get_member(user.id)
+                    if member:
+                        guild_birthday_users.append(user)
+                
+                if guild_birthday_users:
+                    try:
+                        await self.send_birthday_wishes(channel, guild_birthday_users)
+                        wishes_sent_to_anyone = True
+                        logger.info(f"🎉 Sent birthday wishes in guild {guild.name} ({guild.id})")
+                    except Exception as e:
+                        logger.error(f"❌ Failed to send birthday wishes in guild {guild.id}: {e}")
+
+            # Mark wishes as sent globally if we attempted to send them
+            if wishes_sent_to_anyone:
+                for user in birthday_users:
+                    self.mark_wish_sent(user.id)
+                logger.info(f"🎉 Marked birthday wishes as sent for {len(birthday_users)} user(s) across applicable guilds.")
                 
         except Exception as e:
             logger.error(f"❌ Error in birthday check task: {e}")
@@ -839,37 +850,43 @@ class BirthdaySystem(commands.Cog):
     async def _send_immediate_birthday_wish(self, user_id: int):
         """Send birthday wish immediately for a user whose birthday is today"""
         try:
-            # Get birthday channel
-            # Get birthday channel for this guild
-            guild_id = None
+            # Fetch user
+            user = self.bot.get_user(user_id)
+            if not user:
+                try:
+                    user = await self.bot.fetch_user(user_id)
+                except discord.NotFound:
+                    logger.error(f"❌ Could not fetch user {user_id} for immediate birthday wish")
+                    return
+            
+            wishes_sent_to_anyone = False
+
+            # For each guild the bot is in, check if it has a birthday channel
             for guild in self.bot.guilds:
                 birthday_channel_id = self.get_birthday_channel(guild.id)
-                if birthday_channel_id:
-                    break
+                if not birthday_channel_id:
+                    continue
+                    
+                channel = guild.get_channel(int(birthday_channel_id))
+                if not channel:
+                    continue
+                    
+                # Check if user is in this guild
+                member = guild.get_member(user_id)
+                if member:
+                    try:
+                        await self.send_birthday_wishes(channel, [user])
+                        wishes_sent_to_anyone = True
+                        logger.info(f"🎉 Sent immediate birthday wish for user {user_id} in guild {guild.name} ({guild.id})")
+                    except Exception as e:
+                        logger.error(f"❌ Failed to send immediate birthday wish in guild {guild.id}: {e}")
             
-            if not birthday_channel_id:
-                logger.warning("⚠️ No birthday channel configured, cannot send immediate wish")
-                return
-            
-            channel = self.bot.get_channel(int(birthday_channel_id))
-            if not channel:
-                logger.warning(f"⚠️ Birthday channel {birthday_channel_id} not found")
-                return
-            
-            # Fetch user
-            user = await self.bot.fetch_user(user_id)
-            if not user:
-                logger.error(f"❌ Could not fetch user {user_id} for immediate birthday wish")
-                return
-            
-            # Send wish
-            await self.send_birthday_wishes(channel, [user])
-            
-            # Mark as sent
-            self.mark_wish_sent(user_id)
-            
-            logger.info(f"🎉 Sent immediate birthday wish for user {user_id}")
-            
+            if wishes_sent_to_anyone:
+                # Mark as sent globally
+                self.mark_wish_sent(user_id)
+            else:
+                logger.warning(f"⚠️ Could not send immediate wish for user {user_id} - user not found in any guild with a configured birthday channel.")
+                
         except Exception as e:
             logger.error(f"❌ Failed to send immediate birthday wish for user {user_id}: {e}")
 

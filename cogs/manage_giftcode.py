@@ -1681,6 +1681,7 @@ class ManageGiftCode(commands.Cog):
             failed_count = 0
             already_redeemed_count = 0
             completed_count = 0
+            fail_reasons = {}
             progress_lock = asyncio.Lock()
             
             # Lock to stop processing if the code proves invalid globally
@@ -1722,7 +1723,11 @@ class ManageGiftCode(commands.Cog):
                     async with progress_lock:
                         success_count += success
                         already_redeemed_count += already_redeemed
-                        failed_count += failed
+                        if failed:
+                            failed_count += failed
+                            # Add status reason mapping
+                            reason_key = str(status) if status else "UNKNOWN"
+                            fail_reasons[reason_key] = fail_reasons.get(reason_key, 0) + 1
                         completed_count += 1
                         
                         # Update progress message after each completion
@@ -1732,6 +1737,11 @@ class ManageGiftCode(commands.Cog):
                             bar_length = 20
                             filled_length = int(bar_length * completed_count / len(members))
                             progress_bar = '█' * filled_length + '░' * (bar_length - filled_length)
+                            
+                            reasons_text = ""
+                            if fail_reasons:
+                                reasons_list = [f"  └ {r}: {c}" for r, c in fail_reasons.items()]
+                                reasons_text = "\n" + "\n".join(reasons_list)
                             
                             guild_name = channel.guild.name if channel and channel.guild else "Unknown Server"
                             progress_embed = discord.Embed(
@@ -1746,7 +1756,7 @@ class ManageGiftCode(commands.Cog):
                                     f"📊 **Processed:** {completed_count}/{len(members)}\n\n"
                                     f"✅ **Success:** {success_count}\n"
                                     f"ℹ️ **Already Redeemed:** {already_redeemed_count}\n"
-                                    f"❌ **Failed:** {failed_count}\n"
+                                    f"❌ **Failed:** {failed_count}{reasons_text}\n"
                                     f"🏰 **Server:** {guild_name}\n"
                                 ),
                                 color=0x5865F2
@@ -1766,6 +1776,11 @@ class ManageGiftCode(commands.Cog):
             await asyncio.gather(*tasks, return_exceptions=True)
             
             # Send final completion message
+            reasons_text = ""
+            if fail_reasons:
+                reasons_list = [f"  └ {r}: {c}" for r, c in fail_reasons.items()]
+                reasons_text = "\n" + "\n".join(reasons_list)
+                
             final_embed = discord.Embed(
                 title="🎁 Auto-Redeem Complete",
                 description=(
@@ -1776,7 +1791,7 @@ class ManageGiftCode(commands.Cog):
                     f"```\n"
                     f"✅ **Success:** {success_count}\n"
                     f"ℹ️ **Already Redeemed:** {already_redeemed_count}\n"
-                    f"❌ **Failed:** {failed_count}\n"
+                    f"❌ **Failed:** {failed_count}{reasons_text}\n"
                     f"⏰ **Completed:** <t:{int(datetime.now().timestamp())}:R>\n"
                 ),
                 color=0x57F287

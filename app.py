@@ -2343,7 +2343,7 @@ async def birthday(interaction: discord.Interaction):
         )
 
         embed = discord.Embed(title="Birthday Manager", description=embed_text, color=0xff69b4)
-        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1435569370389807144/1435875606632988672/v04HfJr.png?ex=690d8edd&is=690c3d5d&hm=83662954ad3897d2b39763d40c347e27222018839a178420a57eb643ffbc3542")
+        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1435569370389807144/1496492127494996119/image_34e5650b.png?ex=69ea1466&is=69e8c2e6&hm=d6fa1fe93d7c505e34d5c746c5e36f42d9e076c5dd7aab13a4f0683b1bb1dcde")
 
         view = BirthdayView()
         # Send the response (don't pass wait to response.send_message)
