@@ -28,7 +28,7 @@ async def _fetch_with_session(gift_ops, player_id, session):
     headers = {
         "accept": "application/json, text/plain, */*",
         "content-type": "application/x-www-form-urlencoded",
-        "origin": gift_ops.wos_giftcode_redemption_url,
+        "Referer": "https://wos-giftcode-api.centurygame.com",
     }
 
     data_to_encode = {
@@ -116,11 +116,18 @@ async def attempt_gift_code_with_api(gift_ops, player_id, giftcode, session):
         data = gift_ops.encode_data(data_to_encode)
         gift_ops.processing_stats["captcha_submissions"] += 1
 
+        headers = {
+            "accept": "application/json, text/plain, */*",
+            "content-type": "application/x-www-form-urlencoded",
+            "Referer": "https://wos-giftcode-api.centurygame.com",
+        }
+
         # Submit to gift code API
         try:
             async with session.post(
                 gift_ops.wos_giftcode_url,
                 data=data,
+                headers=headers,
                 timeout=aiohttp.ClientTimeout(total=15)
             ) as response_giftcode:
                 # Log the redemption attempt

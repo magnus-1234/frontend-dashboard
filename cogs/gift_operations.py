@@ -1180,7 +1180,7 @@ class GiftOperations(commands.Cog):
         headers = {
             "accept": "application/json, text/plain, */*",
             "content-type": "application/x-www-form-urlencoded",
-            "origin": self.wos_giftcode_redemption_url,
+            "Referer": "https://wos-giftcode-api.centurygame.com",
         }
 
         data_to_encode = {
