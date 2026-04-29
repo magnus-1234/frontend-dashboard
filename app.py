@@ -1258,11 +1258,38 @@ async def check_server_lock(interaction: discord.Interaction) -> bool:
                 )
                 embed.set_footer(text="Contact your server administrator for assistance")
                 
+                # Add Contact Administrator button
+                view = discord.ui.View(timeout=None)
+                
+                # Get bot owner for contact link
+                app_info = None
                 try:
-                    await interaction.response.send_message(embed=embed, ephemeral=True)
+                    app_info = await interaction.client.application_info()
+                except Exception:
+                    pass
+                
+                if app_info and app_info.owner:
+                    owner_id = app_info.owner.id
+                    view.add_item(discord.ui.Button(
+                        label="Contact Administrator",
+                        emoji="📩",
+                        style=discord.ButtonStyle.link,
+                        url=f"https://discord.com/users/{owner_id}"
+                    ))
+                else:
+                    # Fallback: generic support server link or just a non-link button
+                    view.add_item(discord.ui.Button(
+                        label="Contact Administrator",
+                        emoji="📩",
+                        style=discord.ButtonStyle.link,
+                        url="https://discord.com"
+                    ))
+                
+                try:
+                    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
                 except:
                     try:
-                        await interaction.followup.send(embed=embed, ephemeral=True)
+                        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
                     except:
                         pass
                 
