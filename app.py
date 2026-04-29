@@ -921,7 +921,7 @@ async def setup_hook():
         "cogs.tictactoe",  # Tic-Tac-Toe game
         "cogs.alliance_monitor",  # Alliance online status monitoring
         # NOTE: cogs.start_menu removed from here — it was duplicated (also at top of list)
-        "cogs.debug_mongo_cog",  # Temporary debug cog for MongoDB
+        # "cogs.debug_mongo_cog",  # Removed — debug tools moved to /settings button
     ]
     
     loaded_count = 0
@@ -2396,77 +2396,7 @@ async def birthday(interaction: discord.Interaction):
 # a wrapper attempt to register `/settings`.
 
 
-@bot.tree.command(name="debug_list_commands", description="(Admin) List registered app commands and their scopes")
-@app_commands.default_permissions(administrator=True)
-async def debug_list_commands_wrapper(interaction: discord.Interaction):
-    """Admin helper to enumerate the bot.tree commands the bot currently has.
-
-    Use this from your dev guild to confirm whether `/settings` is registered
-    and where commands are scoped.
-    """
-    try:
-        try:
-            await interaction.response.defer(ephemeral=True)
-        except Exception:
-            pass
-
-        infos = []
-        try:
-            if hasattr(bot.tree, 'get_commands'):
-                iterable = bot.tree.get_commands()
-            else:
-                iterable = bot.tree.walk_commands()
-        except Exception:
-            try:
-                iterable = bot.tree.walk_commands()
-            except Exception:
-                iterable = []
-
-        for c in iterable:
-            try:
-                name = getattr(c, 'name', str(c))
-                desc = getattr(c, 'description', '') or ''
-                gid = getattr(c, 'guild_id', None)
-                scope = str(gid) if gid else 'global'
-                infos.append(f"/{name} — {desc} — scope: {scope}")
-            except Exception:
-                continue
-
-        if not infos:
-            await interaction.followup.send("No app commands found.", ephemeral=True)
-            return
-
-        out = "\n".join(infos)
-        for i in range(0, len(out), 1800):
-            await interaction.followup.send(out[i:i+1800], ephemeral=True)
-    except Exception as e:
-        try:
-            await interaction.followup.send(f"Failed to list commands: {e}", ephemeral=True)
-        except Exception:
-            pass
-
-
-@bot.tree.command(name="debug_cogs", description="(Admin) List loaded cogs and extensions")
-@app_commands.default_permissions(administrator=True)
-async def debug_cogs_wrapper(interaction: discord.Interaction):
-    """Admin helper to enumerate loaded cogs and extensions."""
-    try:
-        try:
-            await interaction.response.defer(ephemeral=True)
-        except Exception:
-            pass
-
-        cog_names = sorted(list(bot.cogs.keys())) if getattr(bot, 'cogs', None) else []
-        ext_names = sorted(list(bot.extensions.keys())) if getattr(bot, 'extensions', None) else []
-
-        out = f"Cogs: {', '.join(cog_names) or 'None'}\nExtensions: {', '.join(ext_names) or 'None'}"
-        for i in range(0, len(out), 1800):
-            await interaction.followup.send(out[i:i+1800], ephemeral=True)
-    except Exception as e:
-        try:
-            await interaction.followup.send(f"Failed to list cogs/extensions: {e}", ephemeral=True)
-        except Exception:
-            pass
+# Debug slash commands removed — debug tools moved to /settings > Debug button
 
 
 ## `/load_alliance` admin helper removed — the Alliance cog should be loaded

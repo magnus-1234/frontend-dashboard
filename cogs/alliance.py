@@ -676,7 +676,13 @@ class Alliance(commands.Cog):
                 custom_id=f"lock_bot:{user_id}",
                 row=4
             ))
-
+            view.add_item(discord.ui.Button(
+                label="Debug",
+                emoji="🔍",
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"debug_bot:{user_id}",
+                row=4
+            ))
             # Add logo to embed
             embed.set_thumbnail(url="attachment://logo.png")
             
@@ -1732,6 +1738,99 @@ class Alliance(commands.Cog):
                             await interaction.response.send_message("❌ Error loading control panel.", ephemeral=True)
                         else:
                             await interaction.followup.send("❌ Error loading control panel.", ephemeral=True)
+
+                elif custom_id == "debug_bot":
+                    # Only global admins can use debug
+                    if is_initial != 1:
+                        await interaction.response.send_message(
+                            "❌ Only Global Administrators can access debug tools.",
+                            ephemeral=True
+                        )
+                        return
+                        
+                    await interaction.response.defer(ephemeral=True)
+                    
+                    import sys
+                    import os
+                    
+                    def safe_mongo_enabled():
+                        try:
+                            from db.mongo_adapters import mongo_enabled
+                            return mongo_enabled()
+                        except Exception as e:
+                            return f"Error importing mongo_enabled: {e}"
+                    
+                    def safe_get_db():
+                        try:
+                            from db.mongo_adapters import _get_db
+                            return _get_db()
+                        except Exception as e:
+                            raise ImportError(f"Error importing _get_db: {e}")
+                            
+                    lines = []
+                    lines.append(f"**🔧 Diagnostic Output**")
+                    try:
+                        lines.append(f"\n**System**")
+                        lines.append(f"Python: {sys.version.split()[0]}")
+                        
+                        # Cogs and Extensions
+                        cog_names = sorted(list(self.bot.cogs.keys())) if getattr(self.bot, 'cogs', None) else []
+                        ext_names = sorted(list(self.bot.extensions.keys())) if getattr(self.bot, 'extensions', None) else []
+                        lines.append(f"Loaded Cogs: {len(cog_names)}")
+                        
+                        # Commands
+                        infos = []
+                        try:
+                            if hasattr(self.bot.tree, 'get_commands'):
+                                iterable = self.bot.tree.get_commands()
+                            else:
+                                iterable = self.bot.tree.walk_commands()
+                            infos = [c for c in iterable]
+                        except Exception:
+                            pass
+                        lines.append(f"Registered Commands: {len(infos)}")
+                        
+                        lines.append(f"\n**Database Context**")
+                        uri = os.getenv('MONGO_URI')
+                        db_name = os.getenv('MONGO_DB_NAME')
+                        lines.append(f"MONGO_URI present: {bool(uri)}")
+                        lines.append(f"MONGO_DB_NAME: `{db_name}`")
+                        
+                        try:
+                            import pymongo
+                            lines.append(f"pymongo: {pymongo.__version__}")
+                        except ImportError:
+                            lines.append("pymongo: ❌ MISSING")
+                            
+                        is_enabled = safe_mongo_enabled()
+                        lines.append(f"mongo_enabled(): `{is_enabled}`")
+                        
+                        if isinstance(is_enabled, bool) and is_enabled:
+                            try:
+                                db = safe_get_db()
+                                lines.append(f"\n**Collections Status**")
+                                cols = {
+                                    'reminders': 'reminders', 
+                                    'alliance_members': 'alliance_members',
+                                    'gift_codes': 'gift_codes',
+                                    'auto_redeem_settings': 'auto_redeem_settings',
+                                    'users': 'users'
+                                }
+                                for name, col_name in cols.items():
+                                    try:
+                                        count = db[col_name].count_documents({})
+                                        lines.append(f"▸ {name}: `{count}` docs")
+                                    except Exception as e:
+                                        lines.append(f"▸ {name}: Error {e}")
+                            except Exception as e:
+                                lines.append(f"**Connection Error**: {e}")
+                                
+                    except Exception as e:
+                        lines.append(f"Fatal Debug Error: {e}")
+                        
+                    output = "\n".join(lines)
+                    embed = discord.Embed(title="Bot Diagnostics", description=output, color=0x3498DB)
+                    await interaction.followup.send(embed=embed, ephemeral=True)
 
                 elif custom_id == "lock_bot":
                     # Only global admins can lock/unlock bot
