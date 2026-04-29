@@ -2201,24 +2201,11 @@ class ManageGiftCode(commands.Cog):
     async def get_active_gift_codes_consolidated(self, force_refresh=False):
         """
         Fetch and filter active gift codes from both website and API sources.
-        Returns a dictionary mapping gift code strings to their expiry dates.
+        Returns a dictionary mapping gift code strings (UPPERCASE) to their date/expiry info.
+        
+        The web scrapers and external APIs are the source of truth.
+        If they say a code is active, it IS active — no DB filtering applied.
         """
-        # Load known invalid codes from DB to filter out quickly (unless forcing refresh)
-        invalid_codes = set()
-        if not force_refresh:
-            try:
-                if mongo_enabled() and GiftCodesAdapter:
-                    mongo_codes = GiftCodesAdapter.get_all()
-                    for c, _, status in mongo_codes:
-                        if status in ('invalid', 'expired'):
-                            invalid_codes.add(c)
-                
-                self.cursor.execute("SELECT giftcode FROM gift_codes WHERE validation_status IN ('invalid', 'expired')")
-                for row in self.cursor.fetchall():
-                    invalid_codes.add(row[0])
-            except Exception as e:
-                self.logger.warning(f"Failed to fetch invalid codes for filtering: {e}")
-
         active_codes_map = {}
         
         # 1. Fetch from website scrapers (wostools API, wosgiftcodes RSS, wosgiftcodes HTML)
@@ -2245,17 +2232,9 @@ class ManageGiftCode(commands.Cog):
                         active_codes_map[code_upper] = date_str
         except Exception as e:
             self.logger.error(f"Error fetching API codes for consolidated list: {e}")
-            
-        # 3. Filter ONLY by database invalid/expired status — no date filtering
-        # Codes expire when the game API rejects them, not based on dates
-        invalid_upper = {c.upper() for c in invalid_codes}
-        filtered_map = {
-            code: expiry 
-            for code, expiry in active_codes_map.items() 
-            if code.upper() not in invalid_upper
-        }
-                
-        return filtered_map
+        
+        self.logger.info(f"Consolidated active codes: {list(active_codes_map.keys())}")
+        return active_codes_map
 
     async def check_giftcode_in_api(self, giftcode: str) -> bool:
         """Check if a gift code exists in the API"""
