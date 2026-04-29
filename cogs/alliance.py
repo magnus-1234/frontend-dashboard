@@ -166,6 +166,38 @@ class Alliance(commands.Cog):
         """Clean up when cog is unloaded"""
         self.monitor_alliances.cancel()
 
+    @commands.Cog.listener()
+    async def on_guild_join(self, guild):
+        """Auto-lock new servers when bot joins: lock /manage and alliance monitor by default."""
+        try:
+            print(f"\U0001f512 [AUTO-LOCK] Bot joined server: {guild.name} ({guild.id}). Applying default locks...")
+            
+            # 1. Lock the bot (/manage) via server_locks table
+            try:
+                self.c_settings.execute(
+                    "INSERT OR REPLACE INTO server_locks (guild_id, locked, locked_by, locked_at) VALUES (?, 1, ?, CURRENT_TIMESTAMP)",
+                    (guild.id, self.bot.user.id)
+                )
+                self.conn_settings.commit()
+                print(f"   \u2705 /manage locked for {guild.name}")
+            except Exception as e:
+                print(f"   \u274c Failed to lock /manage for {guild.name}: {e}")
+            
+            # 2. Lock alliance monitor + set default redeem limit (100) via ServerLimitsAdapter
+            try:
+                ServerLimitsAdapter.set(guild.id, {
+                    'max_auto_redeem_members': 100,
+                    'alliance_monitor_locked': True,
+                    'updated_by': self.bot.user.id
+                })
+                print(f"   \u2705 Alliance monitor locked + redeem limit=100 for {guild.name}")
+            except Exception as e:
+                print(f"   \u274c Failed to set server limits for {guild.name}: {e}")
+            
+            print(f"\U0001f512 [AUTO-LOCK] Defaults applied for {guild.name}")
+        except Exception as e:
+            print(f"\u274c [AUTO-LOCK] Error processing guild join for {guild}: {e}")
+
     def _create_table(self):
         # Core alliance list
         self.c.execute("""
@@ -1370,27 +1402,35 @@ class Alliance(commands.Cog):
                                 
                                 async def toggle_monitor_callback(btn_inter: discord.Interaction):
                                     new_locked = not monitor_locked
+                                    # When unlocking, set default redeem limit to 100
+                                    new_max = max_members
+                                    if not new_locked and max_members == -1:
+                                        new_max = 100  # Default limit when unlocking
+                                    
                                     success = ServerLimitsAdapter.set(selected_guild_id, {
-                                        'max_auto_redeem_members': max_members,
+                                        'max_auto_redeem_members': new_max,
                                         'alliance_monitor_locked': new_locked,
                                         'updated_by': btn_inter.user.id
                                     })
                                     
                                     all_limits[str(selected_guild_id)] = {
                                         'guild_id': str(selected_guild_id),
-                                        'max_auto_redeem_members': max_members,
+                                        'max_auto_redeem_members': new_max,
                                         'alliance_monitor_locked': new_locked
                                     }
                                     
-                                    status = "🔒 **LOCKED**" if new_locked else "🔓 **Unlocked**"
+                                    status = "\U0001f512 **LOCKED**" if new_locked else "\U0001f513 **Unlocked**"
+                                    extra = ""
+                                    if not new_locked and max_members == -1:
+                                        extra = "\n\u2514 Auto-redeem limit set to **100** (default)"
                                     if success:
                                         await btn_inter.response.send_message(
-                                            f"✅ Alliance monitor for **{guild_name}** is now {status}",
+                                            f"\u2705 Alliance monitor for **{guild_name}** is now {status}{extra}",
                                             ephemeral=True
                                         )
                                     else:
                                         await btn_inter.response.send_message(
-                                            "❌ Failed to update monitor lock.",
+                                            "\u274c Failed to update monitor lock.",
                                             ephemeral=True
                                         )
                                 
