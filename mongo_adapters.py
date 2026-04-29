@@ -3977,4 +3977,163 @@ class AutoTranslateAdapter:
         except Exception: return False
 
 
+# ============================================================================
+# SERVER LIMITS ADAPTER — Per-guild controls for scaling (1000+ servers)
+# ============================================================================
+
+class ServerLimitsAdapter:
+    """Adapter for managing per-server limits and locks in MongoDB."""
+    COLL = 'server_limits'
+
+    @staticmethod
+    def get(guild_id: int) -> Optional[Dict[str, Any]]:
+        try:
+            db = _get_db_main()
+            doc = db[ServerLimitsAdapter.COLL].find_one({'_id': str(guild_id)})
+            if doc:
+                doc['guild_id'] = str(doc['_id'])
+                doc.pop('_id', None)
+            return doc
+        except Exception as e:
+            logger.error(f'Failed to get server limits for guild {guild_id}: {e}')
+            return None
+
+    @staticmethod
+    def set(guild_id: int, data: Dict[str, Any]) -> bool:
+        try:
+            db = _get_db_main()
+            now = datetime.utcnow().isoformat()
+            payload = data.copy()
+            for k in ['created_at', 'guild_id', '_id']:
+                payload.pop(k, None)
+            payload['updated_at'] = now
+            db[ServerLimitsAdapter.COLL].update_one(
+                {'_id': str(guild_id)},
+                {'$set': payload, '$setOnInsert': {'created_at': now}},
+                upsert=True
+            )
+            return True
+        except Exception as e:
+            logger.error(f'Failed to set server limits for guild {guild_id}: {e}')
+            return False
+
+    @staticmethod
+    def get_all() -> List[Dict[str, Any]]:
+        try:
+            db = _get_db_main()
+            docs = list(db[ServerLimitsAdapter.COLL].find({}))
+            for doc in docs:
+                doc['guild_id'] = str(doc['_id'])
+                doc.pop('_id', None)
+            return docs
+        except Exception as e:
+            logger.error(f'Failed to get all server limits: {e}')
+            return []
+
+    @staticmethod
+    def delete(guild_id: int) -> bool:
+        try:
+            db = _get_db_main()
+            result = db[ServerLimitsAdapter.COLL].delete_one({'_id': str(guild_id)})
+            return result.deleted_count > 0
+        except Exception as e:
+            logger.error(f'Failed to delete server limits for guild {guild_id}: {e}')
+            return False
+
+    @staticmethod
+    async def get_async(guild_id: int) -> Optional[Dict[str, Any]]:
+        try:
+            db = await _get_db_main_async()
+            doc = await db[ServerLimitsAdapter.COLL].find_one({'_id': str(guild_id)})
+            if doc:
+                doc['guild_id'] = str(doc['_id'])
+                doc.pop('_id', None)
+            return doc
+        except Exception as e:
+            logger.error(f'Failed to get server limits (async) for guild {guild_id}: {e}')
+            return None
+
+    @staticmethod
+    async def set_async(guild_id: int, data: Dict[str, Any]) -> bool:
+        try:
+            db = await _get_db_main_async()
+            now = datetime.utcnow().isoformat()
+            payload = data.copy()
+            for k in ['created_at', 'guild_id', '_id']:
+                payload.pop(k, None)
+            payload['updated_at'] = now
+            await db[ServerLimitsAdapter.COLL].update_one(
+                {'_id': str(guild_id)},
+                {'$set': payload, '$setOnInsert': {'created_at': now}},
+                upsert=True
+            )
+            return True
+        except Exception as e:
+            logger.error(f'Failed to set server limits (async) for guild {guild_id}: {e}')
+            return False
+
+    @staticmethod
+    async def get_all_async() -> List[Dict[str, Any]]:
+        try:
+            db = await _get_db_main_async()
+            cursor = db[ServerLimitsAdapter.COLL].find({})
+            docs = await cursor.to_list(length=None)
+            for doc in docs:
+                doc['guild_id'] = str(doc['_id'])
+                doc.pop('_id', None)
+            return docs
+        except Exception as e:
+            logger.error(f'Failed to get all server limits (async): {e}')
+            return []
+
+    @staticmethod
+    async def delete_async(guild_id: int) -> bool:
+        try:
+            db = await _get_db_main_async()
+            result = await db[ServerLimitsAdapter.COLL].delete_one({'_id': str(guild_id)})
+            return result.deleted_count > 0
+        except Exception as e:
+            logger.error(f'Failed to delete server limits (async) for guild {guild_id}: {e}')
+            return False
+
+    @staticmethod
+    def get_max_redeem_members(guild_id: int) -> int:
+        try:
+            doc = ServerLimitsAdapter.get(guild_id)
+            if doc:
+                return int(doc.get('max_auto_redeem_members', -1))
+            return -1
+        except Exception:
+            return -1
+
+    @staticmethod
+    async def get_max_redeem_members_async(guild_id: int) -> int:
+        try:
+            doc = await ServerLimitsAdapter.get_async(guild_id)
+            if doc:
+                return int(doc.get('max_auto_redeem_members', -1))
+            return -1
+        except Exception:
+            return -1
+
+    @staticmethod
+    def is_monitor_locked(guild_id: int) -> bool:
+        try:
+            doc = ServerLimitsAdapter.get(guild_id)
+            if doc:
+                return bool(doc.get('alliance_monitor_locked', False))
+            return False
+        except Exception:
+            return False
+
+    @staticmethod
+    async def is_monitor_locked_async(guild_id: int) -> bool:
+        try:
+            doc = await ServerLimitsAdapter.get_async(guild_id)
+            if doc:
+                return bool(doc.get('alliance_monitor_locked', False))
+            return False
+        except Exception:
+            return False
+
 

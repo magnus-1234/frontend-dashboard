@@ -4094,4 +4094,200 @@ class AutoTranslateAdapter:
         except Exception: return False
 
 
+# ============================================================================
+# SERVER LIMITS ADAPTER — Per-guild controls for scaling (1000+ servers)
+# ============================================================================
+
+class ServerLimitsAdapter:
+    """Adapter for managing per-server limits and locks in MongoDB.
+    
+    Document schema:
+    {
+        "_id": "<guild_id>",
+        "max_auto_redeem_members": -1,       # -1 = unlimited
+        "alliance_monitor_locked": false,
+        "updated_by": 123456789,
+        "updated_at": "...",
+        "created_at": "..."
+    }
+    """
+    COLL = 'server_limits'
+
+    # --- Sync methods ---
+
+    @staticmethod
+    def get(guild_id: int) -> Optional[Dict[str, Any]]:
+        """Get limits for a guild. Returns None if no limits are set (defaults apply)."""
+        try:
+            db = _get_db_main()
+            doc = db[ServerLimitsAdapter.COLL].find_one({'_id': str(guild_id)})
+            if doc:
+                doc['guild_id'] = str(doc['_id'])
+                doc.pop('_id', None)
+            return doc
+        except Exception as e:
+            logger.error(f'Failed to get server limits for guild {guild_id}: {e}')
+            return None
+
+    @staticmethod
+    def set(guild_id: int, data: Dict[str, Any]) -> bool:
+        """Upsert limits for a guild."""
+        try:
+            db = _get_db_main()
+            now = datetime.utcnow().isoformat()
+            payload = data.copy()
+            payload.pop('created_at', None)
+            payload.pop('guild_id', None)
+            payload.pop('_id', None)
+            payload['updated_at'] = now
+
+            db[ServerLimitsAdapter.COLL].update_one(
+                {'_id': str(guild_id)},
+                {'$set': payload, '$setOnInsert': {'created_at': now}},
+                upsert=True
+            )
+            return True
+        except Exception as e:
+            logger.error(f'Failed to set server limits for guild {guild_id}: {e}')
+            return False
+
+    @staticmethod
+    def get_all() -> List[Dict[str, Any]]:
+        """Get limits for all guilds that have custom settings."""
+        try:
+            db = _get_db_main()
+            docs = list(db[ServerLimitsAdapter.COLL].find({}))
+            results = []
+            for doc in docs:
+                doc['guild_id'] = str(doc['_id'])
+                doc.pop('_id', None)
+                results.append(doc)
+            return results
+        except Exception as e:
+            logger.error(f'Failed to get all server limits: {e}')
+            return []
+
+    @staticmethod
+    def delete(guild_id: int) -> bool:
+        """Delete limits for a guild (reset to defaults)."""
+        try:
+            db = _get_db_main()
+            result = db[ServerLimitsAdapter.COLL].delete_one({'_id': str(guild_id)})
+            return result.deleted_count > 0
+        except Exception as e:
+            logger.error(f'Failed to delete server limits for guild {guild_id}: {e}')
+            return False
+
+    # --- Async methods ---
+
+    @staticmethod
+    async def get_async(guild_id: int) -> Optional[Dict[str, Any]]:
+        """Get limits for a guild asynchronously."""
+        try:
+            db = await _get_db_main_async()
+            doc = await db[ServerLimitsAdapter.COLL].find_one({'_id': str(guild_id)})
+            if doc:
+                doc['guild_id'] = str(doc['_id'])
+                doc.pop('_id', None)
+            return doc
+        except Exception as e:
+            logger.error(f'Failed to get server limits (async) for guild {guild_id}: {e}')
+            return None
+
+    @staticmethod
+    async def set_async(guild_id: int, data: Dict[str, Any]) -> bool:
+        """Upsert limits for a guild asynchronously."""
+        try:
+            db = await _get_db_main_async()
+            now = datetime.utcnow().isoformat()
+            payload = data.copy()
+            payload.pop('created_at', None)
+            payload.pop('guild_id', None)
+            payload.pop('_id', None)
+            payload['updated_at'] = now
+
+            await db[ServerLimitsAdapter.COLL].update_one(
+                {'_id': str(guild_id)},
+                {'$set': payload, '$setOnInsert': {'created_at': now}},
+                upsert=True
+            )
+            return True
+        except Exception as e:
+            logger.error(f'Failed to set server limits (async) for guild {guild_id}: {e}')
+            return False
+
+    @staticmethod
+    async def get_all_async() -> List[Dict[str, Any]]:
+        """Get limits for all guilds asynchronously."""
+        try:
+            db = await _get_db_main_async()
+            cursor = db[ServerLimitsAdapter.COLL].find({})
+            docs = await cursor.to_list(length=None)
+            results = []
+            for doc in docs:
+                doc['guild_id'] = str(doc['_id'])
+                doc.pop('_id', None)
+                results.append(doc)
+            return results
+        except Exception as e:
+            logger.error(f'Failed to get all server limits (async): {e}')
+            return []
+
+    @staticmethod
+    async def delete_async(guild_id: int) -> bool:
+        """Delete limits for a guild asynchronously (reset to defaults)."""
+        try:
+            db = await _get_db_main_async()
+            result = await db[ServerLimitsAdapter.COLL].delete_one({'_id': str(guild_id)})
+            return result.deleted_count > 0
+        except Exception as e:
+            logger.error(f'Failed to delete server limits (async) for guild {guild_id}: {e}')
+            return False
+
+    # --- Helper methods ---
+
+    @staticmethod
+    def get_max_redeem_members(guild_id: int) -> int:
+        """Get the max auto-redeem members for a guild. Returns -1 for unlimited."""
+        try:
+            doc = ServerLimitsAdapter.get(guild_id)
+            if doc:
+                return int(doc.get('max_auto_redeem_members', -1))
+            return -1  # default: unlimited
+        except Exception:
+            return -1
+
+    @staticmethod
+    async def get_max_redeem_members_async(guild_id: int) -> int:
+        """Get the max auto-redeem members for a guild asynchronously. Returns -1 for unlimited."""
+        try:
+            doc = await ServerLimitsAdapter.get_async(guild_id)
+            if doc:
+                return int(doc.get('max_auto_redeem_members', -1))
+            return -1
+        except Exception:
+            return -1
+
+    @staticmethod
+    def is_monitor_locked(guild_id: int) -> bool:
+        """Check if alliance monitoring is locked for a guild."""
+        try:
+            doc = ServerLimitsAdapter.get(guild_id)
+            if doc:
+                return bool(doc.get('alliance_monitor_locked', False))
+            return False  # default: unlocked
+        except Exception:
+            return False
+
+    @staticmethod
+    async def is_monitor_locked_async(guild_id: int) -> bool:
+        """Check if alliance monitoring is locked for a guild asynchronously."""
+        try:
+            doc = await ServerLimitsAdapter.get_async(guild_id)
+            if doc:
+                return bool(doc.get('alliance_monitor_locked', False))
+            return False
+        except Exception:
+            return False
+
 

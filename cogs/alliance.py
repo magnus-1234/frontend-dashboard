@@ -10,7 +10,7 @@ import os
 from .login_handler import LoginHandler
 from command_animator import command_animation
 try:
-    from db.mongo_adapters import mongo_enabled, AdminsAdapter, AlliancesAdapter, AllianceSettingsAdapter, AllianceMembersAdapter, FurnaceHistoryAdapter, AllianceMonitoringAdapter
+    from db.mongo_adapters import mongo_enabled, AdminsAdapter, AlliancesAdapter, AllianceSettingsAdapter, AllianceMembersAdapter, FurnaceHistoryAdapter, AllianceMonitoringAdapter, ServerLimitsAdapter
 except Exception as import_error:
     # Fallback: If MongoDB adapters fail to import, use SQLite exclusively
     print(f"[WARNING] MongoDB adapters import failed: {import_error}. Using SQLite fallback.")
@@ -62,6 +62,32 @@ except Exception as import_error:
         def insert(data): return False
         @staticmethod
         async def insert_async(data): return False
+
+    class ServerLimitsAdapter:
+        @staticmethod
+        def get(guild_id): return None
+        @staticmethod
+        async def get_async(guild_id): return None
+        @staticmethod
+        def set(guild_id, data): return False
+        @staticmethod
+        async def set_async(guild_id, data): return False
+        @staticmethod
+        def get_all(): return []
+        @staticmethod
+        async def get_all_async(): return []
+        @staticmethod
+        def delete(guild_id): return False
+        @staticmethod
+        async def delete_async(guild_id): return False
+        @staticmethod
+        def get_max_redeem_members(guild_id): return -1
+        @staticmethod
+        async def get_max_redeem_members_async(guild_id): return -1
+        @staticmethod
+        def is_monitor_locked(guild_id): return False
+        @staticmethod
+        async def is_monitor_locked_async(guild_id): return False
 
 
 # Import database utilities for consistent path handling
@@ -521,6 +547,12 @@ class Alliance(commands.Cog):
                     "🔧 **Other Features**\n"
                     "   ▸ Additional utility functions\n"
                     "   ▸ Advanced settings\n\n"
+                    "⚡ **Server Limits**\n"
+                    "   ▸ Set auto-redeem member caps\n"
+                    "   ▸ Lock alliance monitor per server\n\n"
+                    "🛡️ **Control Panel**\n"
+                    "   ▸ Bird's-eye view across all servers\n"
+                    "   ▸ Bulk limit management\n\n"
                     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
                 ),
                 color=0x7B2CBF
@@ -589,6 +621,20 @@ class Alliance(commands.Cog):
                 emoji="📊",
                 style=discord.ButtonStyle.secondary,
                 custom_id=f"system_status:{user_id}",
+                row=3
+            ))
+            view.add_item(discord.ui.Button(
+                label="Server Limits",
+                emoji="⚡",
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"server_limits:{user_id}",
+                row=3
+            ))
+            view.add_item(discord.ui.Button(
+                label="Control Panel",
+                emoji="🛡️",
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"control_panel:{user_id}",
                 row=3
             ))
             view.add_item(discord.ui.Button(
@@ -1116,6 +1162,536 @@ class Alliance(commands.Cog):
                                 "An error occurred while loading Alliance History.",
                                 ephemeral=True
                             )
+
+                elif custom_id == "server_limits":
+                    # Server limits management - only global admins
+                    if is_initial != 1:
+                        await interaction.response.send_message(
+                            "❌ Only Global Administrators can manage server limits.",
+                            ephemeral=True
+                        )
+                        return
+                    
+                    try:
+                        all_guilds = sorted(list(self.bot.guilds), key=lambda g: g.name.lower())
+                        
+                        if not all_guilds:
+                            await interaction.response.send_message("❌ Bot is not in any servers.", ephemeral=True)
+                            return
+                        
+                        # Get all existing limits from MongoDB
+                        all_limits = {}
+                        try:
+                            limits_data = ServerLimitsAdapter.get_all()
+                            for lim in limits_data:
+                                gid = str(lim.get('guild_id', ''))
+                                all_limits[gid] = lim
+                        except Exception:
+                            pass
+                        
+                        servers_per_page = 25
+                        total_pages = (len(all_guilds) + servers_per_page - 1) // servers_per_page
+                        
+                        cog_ref = self
+                        
+                        class ServerLimitsView(discord.ui.View):
+                            def __init__(self, guilds_list, current_page=0):
+                                super().__init__(timeout=180)
+                                self.guilds = guilds_list
+                                self.current_page = current_page
+                                self.total_pages = total_pages
+                                
+                                start_idx = current_page * servers_per_page
+                                end_idx = min(start_idx + servers_per_page, len(guilds_list))
+                                
+                                server_options = []
+                                for guild in guilds_list[start_idx:end_idx]:
+                                    lim = all_limits.get(str(guild.id), {})
+                                    max_members = lim.get('max_auto_redeem_members', -1)
+                                    monitor_locked = lim.get('alliance_monitor_locked', False)
+                                    
+                                    limit_text = f"∞" if max_members == -1 else str(max_members)
+                                    lock_emoji = "🔒" if monitor_locked else "🔓"
+                                    
+                                    server_options.append(
+                                        discord.SelectOption(
+                                            label=f"{guild.name[:85]}",
+                                            value=str(guild.id),
+                                            description=f"Redeem: {limit_text} | Monitor: {lock_emoji} {'Locked' if monitor_locked else 'Open'}",
+                                            emoji="⚡"
+                                        )
+                                    )
+                                
+                                if server_options:
+                                    server_select = discord.ui.Select(
+                                        placeholder="Select a server to configure...",
+                                        options=server_options,
+                                        custom_id="server_limits_select",
+                                        row=0
+                                    )
+                                    server_select.callback = self.server_selected
+                                    self.add_item(server_select)
+                                
+                                if total_pages > 1:
+                                    if current_page > 0:
+                                        prev_btn = discord.ui.Button(label="◀ Previous", style=discord.ButtonStyle.secondary, custom_id="prev_limits_page", row=1)
+                                        prev_btn.callback = self.previous_page
+                                        self.add_item(prev_btn)
+                                    if current_page < total_pages - 1:
+                                        next_btn = discord.ui.Button(label="Next ▶", style=discord.ButtonStyle.secondary, custom_id="next_limits_page", row=1)
+                                        next_btn.callback = self.next_page
+                                        self.add_item(next_btn)
+                                
+                                back_btn = discord.ui.Button(label="◀ Main Menu", emoji="🏠", style=discord.ButtonStyle.secondary, custom_id="back_to_main_limits", row=2)
+                                back_btn.callback = self.back_to_menu
+                                self.add_item(back_btn)
+                            
+                            async def previous_page(self, btn_interaction: discord.Interaction):
+                                new_page = max(0, self.current_page - 1)
+                                new_view = ServerLimitsView(self.guilds, new_page)
+                                embed = self.create_embed(new_page)
+                                await btn_interaction.response.edit_message(embed=embed, view=new_view)
+                            
+                            async def next_page(self, btn_interaction: discord.Interaction):
+                                new_page = min(self.total_pages - 1, self.current_page + 1)
+                                new_view = ServerLimitsView(self.guilds, new_page)
+                                embed = self.create_embed(new_page)
+                                await btn_interaction.response.edit_message(embed=embed, view=new_view)
+                            
+                            async def back_to_menu(self, btn_interaction: discord.Interaction):
+                                await btn_interaction.response.defer()
+                                alliance_cog = btn_interaction.client.get_cog("Alliance")
+                                if alliance_cog:
+                                    await alliance_cog.show_main_menu(btn_interaction)
+                            
+                            async def server_selected(self, select_interaction: discord.Interaction):
+                                selected_guild_id = int(select_interaction.data["values"][0])
+                                target_guild = select_interaction.client.get_guild(selected_guild_id)
+                                guild_name = target_guild.name if target_guild else f"Guild {selected_guild_id}"
+                                member_count = target_guild.member_count if target_guild else "?"
+                                
+                                # Fetch current limits
+                                current_limits = all_limits.get(str(selected_guild_id), {})
+                                max_members = current_limits.get('max_auto_redeem_members', -1)
+                                monitor_locked = current_limits.get('alliance_monitor_locked', False)
+                                
+                                limit_display = "♾️ Unlimited" if max_members == -1 else f"**{max_members}** members"
+                                monitor_display = "🔒 **LOCKED**" if monitor_locked else "🔓 **Open**"
+                                
+                                config_embed = discord.Embed(
+                                    title=f"⚡ Server Limits — {guild_name}",
+                                    description=(
+                                        f"**Server Info**\n"
+                                        f"└ Members: `{member_count}`\n"
+                                        f"└ ID: `{selected_guild_id}`\n\n"
+                                        f"╔═══════════════════════════════════╗\n"
+                                        f"║  **📊 Current Configuration**      ║\n"
+                                        f"╚═══════════════════════════════════╝\n\n"
+                                        f"🎁 **Auto-Redeem Limit:** {limit_display}\n"
+                                        f"   ▸ Max members that can auto-redeem\n\n"
+                                        f"🛡️ **Alliance Monitor:** {monitor_display}\n"
+                                        f"   ▸ Controls whether monitoring runs\n\n"
+                                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                                    ),
+                                    color=0x06B6D4
+                                )
+                                
+                                config_view = discord.ui.View(timeout=180)
+                                
+                                # Set Redeem Limit button
+                                set_limit_btn = discord.ui.Button(
+                                    label="Set Redeem Limit", emoji="📊",
+                                    style=discord.ButtonStyle.primary,
+                                    custom_id=f"set_redeem_limit_{selected_guild_id}", row=0
+                                )
+                                
+                                async def set_limit_callback(btn_inter: discord.Interaction):
+                                    class RedeemLimitModal(discord.ui.Modal, title="Set Auto-Redeem Member Limit"):
+                                        limit_input = discord.ui.TextInput(
+                                            label="Maximum Members (-1 for unlimited)",
+                                            placeholder="Enter a number, e.g. 50, 100, 200 or -1",
+                                            default=str(max_members),
+                                            required=True,
+                                            max_length=10
+                                        )
+                                        
+                                        async def on_submit(modal_self, modal_interaction: discord.Interaction):
+                                            try:
+                                                new_limit = int(modal_self.limit_input.value.strip())
+                                                if new_limit < -1:
+                                                    new_limit = -1
+                                                
+                                                success = ServerLimitsAdapter.set(selected_guild_id, {
+                                                    'max_auto_redeem_members': new_limit,
+                                                    'alliance_monitor_locked': monitor_locked,
+                                                    'updated_by': modal_interaction.user.id
+                                                })
+                                                
+                                                # Update local cache
+                                                all_limits[str(selected_guild_id)] = {
+                                                    'guild_id': str(selected_guild_id),
+                                                    'max_auto_redeem_members': new_limit,
+                                                    'alliance_monitor_locked': monitor_locked
+                                                }
+                                                
+                                                limit_text = "♾️ Unlimited" if new_limit == -1 else f"**{new_limit}** members"
+                                                
+                                                if success:
+                                                    await modal_interaction.response.send_message(
+                                                        f"✅ Auto-redeem limit for **{guild_name}** set to {limit_text}",
+                                                        ephemeral=True
+                                                    )
+                                                else:
+                                                    await modal_interaction.response.send_message(
+                                                        "❌ Failed to save limit. Check MongoDB connection.",
+                                                        ephemeral=True
+                                                    )
+                                            except ValueError:
+                                                await modal_interaction.response.send_message(
+                                                    "❌ Invalid number. Please enter a valid integer.",
+                                                    ephemeral=True
+                                                )
+                                    
+                                    await btn_inter.response.send_modal(RedeemLimitModal())
+                                
+                                set_limit_btn.callback = set_limit_callback
+                                config_view.add_item(set_limit_btn)
+                                
+                                # Toggle Monitor Lock button
+                                toggle_text = "Unlock Monitor" if monitor_locked else "Lock Monitor"
+                                toggle_emoji = "🔓" if monitor_locked else "🔒"
+                                toggle_style = discord.ButtonStyle.success if monitor_locked else discord.ButtonStyle.danger
+                                
+                                toggle_monitor_btn = discord.ui.Button(
+                                    label=toggle_text, emoji=toggle_emoji,
+                                    style=toggle_style,
+                                    custom_id=f"toggle_monitor_{selected_guild_id}", row=0
+                                )
+                                
+                                async def toggle_monitor_callback(btn_inter: discord.Interaction):
+                                    new_locked = not monitor_locked
+                                    success = ServerLimitsAdapter.set(selected_guild_id, {
+                                        'max_auto_redeem_members': max_members,
+                                        'alliance_monitor_locked': new_locked,
+                                        'updated_by': btn_inter.user.id
+                                    })
+                                    
+                                    all_limits[str(selected_guild_id)] = {
+                                        'guild_id': str(selected_guild_id),
+                                        'max_auto_redeem_members': max_members,
+                                        'alliance_monitor_locked': new_locked
+                                    }
+                                    
+                                    status = "🔒 **LOCKED**" if new_locked else "🔓 **Unlocked**"
+                                    if success:
+                                        await btn_inter.response.send_message(
+                                            f"✅ Alliance monitor for **{guild_name}** is now {status}",
+                                            ephemeral=True
+                                        )
+                                    else:
+                                        await btn_inter.response.send_message(
+                                            "❌ Failed to update monitor lock.",
+                                            ephemeral=True
+                                        )
+                                
+                                toggle_monitor_btn.callback = toggle_monitor_callback
+                                config_view.add_item(toggle_monitor_btn)
+                                
+                                # Reset to Defaults button
+                                reset_btn = discord.ui.Button(
+                                    label="Reset Defaults", emoji="🗑️",
+                                    style=discord.ButtonStyle.secondary,
+                                    custom_id=f"reset_limits_{selected_guild_id}", row=1
+                                )
+                                
+                                async def reset_callback(btn_inter: discord.Interaction):
+                                    ServerLimitsAdapter.delete(selected_guild_id)
+                                    all_limits.pop(str(selected_guild_id), None)
+                                    await btn_inter.response.send_message(
+                                        f"✅ Limits reset to defaults for **{guild_name}**\n"
+                                        f"└ Auto-redeem: ♾️ Unlimited\n"
+                                        f"└ Alliance monitor: 🔓 Open",
+                                        ephemeral=True
+                                    )
+                                
+                                reset_btn.callback = reset_callback
+                                config_view.add_item(reset_btn)
+                                
+                                # Back button
+                                back_btn = discord.ui.Button(
+                                    label="◀ Server List", emoji="📋",
+                                    style=discord.ButtonStyle.secondary,
+                                    custom_id="back_to_server_list", row=1
+                                )
+                                
+                                async def back_callback(btn_inter: discord.Interaction):
+                                    # Refresh limits
+                                    try:
+                                        refreshed = ServerLimitsAdapter.get_all()
+                                        all_limits.clear()
+                                        for lim in refreshed:
+                                            all_limits[str(lim.get('guild_id', ''))] = lim
+                                    except Exception:
+                                        pass
+                                    new_view = ServerLimitsView(all_guilds, 0)
+                                    embed = new_view.create_embed(0)
+                                    await btn_inter.response.edit_message(embed=embed, view=new_view)
+                                
+                                back_btn.callback = back_callback
+                                config_view.add_item(back_btn)
+                                
+                                await select_interaction.response.edit_message(embed=config_embed, view=config_view)
+                            
+                            def create_embed(self, page):
+                                start_idx = page * servers_per_page
+                                end_idx = min(start_idx + servers_per_page, len(self.guilds))
+                                
+                                server_list = ""
+                                for idx, guild in enumerate(self.guilds[start_idx:end_idx], start=start_idx + 1):
+                                    lim = all_limits.get(str(guild.id), {})
+                                    max_m = lim.get('max_auto_redeem_members', -1)
+                                    mon_locked = lim.get('alliance_monitor_locked', False)
+                                    
+                                    limit_str = "∞" if max_m == -1 else str(max_m)
+                                    lock_str = "🔒" if mon_locked else "🔓"
+                                    has_config = "⚡" if lim else "  "
+                                    
+                                    server_list += (
+                                        f"{has_config} **{idx:02d}.** {guild.name}\n"
+                                        f"    └ Redeem: `{limit_str}` | Monitor: {lock_str}\n\n"
+                                    )
+                                
+                                embed = discord.Embed(
+                                    title="⚡ Server Limits Management",
+                                    description=(
+                                        "```ansi\n"
+                                        "\u001b[2;36m╔═══════════════════════════════════╗\n"
+                                        "\u001b[2;36m║  \u001b[1;37mSERVER LIMITS CONTROL\u001b[0m\u001b[2;36m          ║\n"
+                                        "\u001b[2;36m╚═══════════════════════════════════╝\u001b[0m\n"
+                                        "```\n"
+                                        f"**Total Servers:** `{len(self.guilds)}`  |  "
+                                        f"**With Limits:** `{len(all_limits)}`\n"
+                                        f"**Page {page + 1}/{self.total_pages}**\n\n"
+                                        f"{server_list}"
+                                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                                        "Select a server to configure limits"
+                                    ),
+                                    color=0x06B6D4
+                                )
+                                return embed
+                        
+                        view = ServerLimitsView(all_guilds, 0)
+                        embed = view.create_embed(0)
+                        await interaction.response.edit_message(embed=embed, view=view)
+                    
+                    except Exception as e:
+                        print(f"Server limits error: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        if not interaction.response.is_done():
+                            await interaction.response.send_message("❌ Error loading server limits.", ephemeral=True)
+                        else:
+                            await interaction.followup.send("❌ Error loading server limits.", ephemeral=True)
+
+                elif custom_id == "control_panel":
+                    # Control Panel - overview dashboard
+                    if is_initial != 1:
+                        await interaction.response.send_message(
+                            "❌ Only Global Administrators can access the Control Panel.",
+                            ephemeral=True
+                        )
+                        return
+                    
+                    try:
+                        total_servers = len(self.bot.guilds)
+                        total_members = sum(g.member_count or 0 for g in self.bot.guilds)
+                        
+                        # Get all limits
+                        all_limits_data = ServerLimitsAdapter.get_all()
+                        limits_map = {str(l.get('guild_id', '')): l for l in all_limits_data}
+                        
+                        servers_with_limits = sum(1 for l in all_limits_data if l.get('max_auto_redeem_members', -1) != -1)
+                        servers_with_lock = sum(1 for l in all_limits_data if l.get('alliance_monitor_locked', False))
+                        
+                        # Build configured servers list (show top 15)
+                        configured_list = ""
+                        for lim in all_limits_data[:15]:
+                            gid = str(lim.get('guild_id', ''))
+                            guild = self.bot.get_guild(int(gid)) if gid.isdigit() else None
+                            gname = guild.name[:30] if guild else f"Unknown ({gid})"
+                            max_m = lim.get('max_auto_redeem_members', -1)
+                            mon_locked = lim.get('alliance_monitor_locked', False)
+                            
+                            limit_str = "∞" if max_m == -1 else str(max_m)
+                            lock_str = "🔒" if mon_locked else "🔓"
+                            configured_list += f"• {gname} — Redeem: `{limit_str}` {lock_str}\n"
+                        
+                        if not configured_list:
+                            configured_list = "*No servers have custom limits configured*"
+                        
+                        if len(all_limits_data) > 15:
+                            configured_list += f"\n*... and {len(all_limits_data) - 15} more*"
+                        
+                        panel_embed = discord.Embed(
+                            title="🛡️ Control Panel — Overview",
+                            description=(
+                                "```ansi\n"
+                                "\u001b[2;33m╔═══════════════════════════════════╗\n"
+                                "\u001b[2;33m║  \u001b[1;37mSCALING CONTROL CENTER\u001b[0m\u001b[2;33m         ║\n"
+                                "\u001b[2;33m╚═══════════════════════════════════╝\u001b[0m\n"
+                                "```\n"
+                                f"📊 **Bot Statistics**\n"
+                                f"   ▸ Total Servers: `{total_servers}`\n"
+                                f"   ▸ Total Users: `{total_members:,}`\n\n"
+                                f"⚡ **Limits Overview**\n"
+                                f"   ▸ Servers with Redeem Limits: `{servers_with_limits}`\n"
+                                f"   ▸ Servers with Monitor Locked: `{servers_with_lock}`\n"
+                                f"   ▸ Servers at Default (no limits): `{total_servers - len(all_limits_data)}`\n\n"
+                                f"📋 **Configured Servers**\n{configured_list}\n\n"
+                                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                            ),
+                            color=0xF59E0B
+                        )
+                        
+                        panel_view = discord.ui.View(timeout=180)
+                        
+                        # Unlock All Monitors button
+                        unlock_all_btn = discord.ui.Button(
+                            label="Unlock All Monitors", emoji="🔓",
+                            style=discord.ButtonStyle.success,
+                            custom_id="unlock_all_monitors", row=0
+                        )
+                        
+                        async def unlock_all_callback(btn_inter: discord.Interaction):
+                            unlocked = 0
+                            for lim in all_limits_data:
+                                if lim.get('alliance_monitor_locked', False):
+                                    gid = lim.get('guild_id', '')
+                                    ServerLimitsAdapter.set(int(gid), {
+                                        'max_auto_redeem_members': lim.get('max_auto_redeem_members', -1),
+                                        'alliance_monitor_locked': False,
+                                        'updated_by': btn_inter.user.id
+                                    })
+                                    unlocked += 1
+                            await btn_inter.response.send_message(
+                                f"✅ Unlocked alliance monitors for **{unlocked}** server(s).",
+                                ephemeral=True
+                            )
+                        
+                        unlock_all_btn.callback = unlock_all_callback
+                        panel_view.add_item(unlock_all_btn)
+                        
+                        # Set Default Limit for All button
+                        set_all_btn = discord.ui.Button(
+                            label="Set Global Limit", emoji="📊",
+                            style=discord.ButtonStyle.primary,
+                            custom_id="set_global_limit", row=0
+                        )
+                        
+                        async def set_all_callback(btn_inter: discord.Interaction):
+                            class GlobalLimitModal(discord.ui.Modal, title="Set Default Limit for ALL Servers"):
+                                limit_input = discord.ui.TextInput(
+                                    label="Max Auto-Redeem Members (-1 = unlimited)",
+                                    placeholder="e.g. 50, 100, -1",
+                                    required=True,
+                                    max_length=10
+                                )
+                                
+                                async def on_submit(modal_self, modal_interaction: discord.Interaction):
+                                    try:
+                                        new_limit = int(modal_self.limit_input.value.strip())
+                                        if new_limit < -1:
+                                            new_limit = -1
+                                        
+                                        applied = 0
+                                        for guild in self.bot.guilds:
+                                            existing = limits_map.get(str(guild.id), {})
+                                            ServerLimitsAdapter.set(guild.id, {
+                                                'max_auto_redeem_members': new_limit,
+                                                'alliance_monitor_locked': existing.get('alliance_monitor_locked', False),
+                                                'updated_by': modal_interaction.user.id
+                                            })
+                                            applied += 1
+                                        
+                                        limit_text = "♾️ Unlimited" if new_limit == -1 else f"**{new_limit}**"
+                                        await modal_interaction.response.send_message(
+                                            f"✅ Set auto-redeem limit to {limit_text} for **{applied}** server(s).",
+                                            ephemeral=True
+                                        )
+                                    except ValueError:
+                                        await modal_interaction.response.send_message(
+                                            "❌ Invalid number.",
+                                            ephemeral=True
+                                        )
+                            
+                            await btn_inter.response.send_modal(GlobalLimitModal())
+                        
+                        set_all_btn.callback = set_all_callback
+                        panel_view.add_item(set_all_btn)
+                        
+                        # Reset All Limits button
+                        reset_all_btn = discord.ui.Button(
+                            label="Reset All Limits", emoji="🗑️",
+                            style=discord.ButtonStyle.danger,
+                            custom_id="reset_all_limits", row=1
+                        )
+                        
+                        async def reset_all_callback(btn_inter: discord.Interaction):
+                            removed = 0
+                            for lim in all_limits_data:
+                                gid = lim.get('guild_id', '')
+                                if gid:
+                                    ServerLimitsAdapter.delete(int(gid))
+                                    removed += 1
+                            await btn_inter.response.send_message(
+                                f"✅ Removed all custom limits from **{removed}** server(s). All servers now use defaults (unlimited redeem, monitor open).",
+                                ephemeral=True
+                            )
+                        
+                        reset_all_btn.callback = reset_all_callback
+                        panel_view.add_item(reset_all_btn)
+                        
+                        # Server Limits button (go to per-server)
+                        to_limits_btn = discord.ui.Button(
+                            label="Per-Server Config", emoji="⚡",
+                            style=discord.ButtonStyle.secondary,
+                            custom_id="go_to_server_limits", row=1
+                        )
+                        
+                        async def to_limits_callback(btn_inter: discord.Interaction):
+                            # Trigger the server_limits flow
+                            btn_inter.data['custom_id'] = f"server_limits:{owner_id}"
+                            await self.on_interaction(btn_inter)
+                        
+                        to_limits_btn.callback = to_limits_callback
+                        panel_view.add_item(to_limits_btn)
+                        
+                        # Main Menu button
+                        main_btn = discord.ui.Button(
+                            label="◀ Main Menu", emoji="🏠",
+                            style=discord.ButtonStyle.secondary,
+                            custom_id="back_to_main_panel", row=2
+                        )
+                        
+                        async def main_callback(btn_inter: discord.Interaction):
+                            await btn_inter.response.defer()
+                            alliance_cog = btn_inter.client.get_cog("Alliance")
+                            if alliance_cog:
+                                await alliance_cog.show_main_menu(btn_inter)
+                        
+                        main_btn.callback = main_callback
+                        panel_view.add_item(main_btn)
+                        
+                        await interaction.response.edit_message(embed=panel_embed, view=panel_view)
+                    
+                    except Exception as e:
+                        print(f"Control panel error: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        if not interaction.response.is_done():
+                            await interaction.response.send_message("❌ Error loading control panel.", ephemeral=True)
+                        else:
+                            await interaction.followup.send("❌ Error loading control panel.", ephemeral=True)
 
                 elif custom_id == "lock_bot":
                     # Only global admins can lock/unlock bot
@@ -2942,6 +3518,15 @@ class Alliance(commands.Cog):
             self.log_message(f"Monitoring {len(monitored)} alliance(s)")
             
             for config in monitored:
+                # Check if this guild's monitor is locked
+                guild_id = config['guild_id']
+                try:
+                    if await ServerLimitsAdapter.is_monitor_locked_async(guild_id):
+                        self.log_message(f"🔒 Skipping alliance monitor for guild {guild_id} (locked by admin)")
+                        continue
+                except Exception:
+                    pass  # On error, proceed with monitoring (fail-open)
+                
                 await self._check_alliance_changes(
                     config['alliance_id'],
                     config['channel_id'],

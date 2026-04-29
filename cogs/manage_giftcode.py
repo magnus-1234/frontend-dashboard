@@ -16,7 +16,7 @@ import logging
 import giftcode_poster
 
 try:
-    from db.mongo_adapters import mongo_enabled, GiftCodesAdapter, AutoRedeemSettingsAdapter, AutoRedeemChannelsAdapter, GiftCodeRedemptionAdapter, AutoRedeemMembersAdapter, AutoRedeemedCodesAdapter, _get_db
+    from db.mongo_adapters import mongo_enabled, GiftCodesAdapter, AutoRedeemSettingsAdapter, AutoRedeemChannelsAdapter, GiftCodeRedemptionAdapter, AutoRedeemMembersAdapter, AutoRedeemedCodesAdapter, _get_db, ServerLimitsAdapter
 except Exception:
     mongo_enabled = lambda: False
     GiftCodesAdapter = None
@@ -25,6 +25,12 @@ except Exception:
     AutoRedeemMembersAdapter = None
     AutoRedeemedCodesAdapter = None
     _get_db = lambda: None
+    
+    class ServerLimitsAdapter:
+        @staticmethod
+        def get_max_redeem_members(guild_id): return -1
+        @staticmethod
+        async def get_max_redeem_members_async(guild_id): return -1
     
     # Fallback stub for GiftCodeRedemptionAdapter
     class GiftCodeRedemptionAdapter:
@@ -875,6 +881,18 @@ class ManageGiftCode(commands.Cog):
                     if member.get('fid') and str(member.get('fid', '')).strip() and str(member.get('fid', '')).lower() != 'none'
                 ]
                 
+                # Step 4: Enforce server redeem member limit
+                try:
+                    max_limit = await ServerLimitsAdapter.get_max_redeem_members_async(guild_id)
+                    if max_limit > 0 and len(valid_members) > max_limit:
+                        cog_instance.logger.warning(
+                            f"⚠️ Guild {guild_id} limited to {max_limit} auto-redeem members "
+                            f"(has {len(valid_members)}, truncating)"
+                        )
+                        valid_members = valid_members[:max_limit]
+                except Exception as limit_e:
+                    cog_instance.logger.debug(f"Could not check member limit for guild {guild_id}: {limit_e}")
+                
                 return valid_members
             except Exception as e:
                 cog_instance.logger.error(f"Unexpected error getting auto-redeem members for guild {guild_id} (async): {e}", exc_info=True)
@@ -1002,6 +1020,21 @@ class ManageGiftCode(commands.Cog):
                 # Ensure fid is a clean string and guild_id is int
                 fid = str(fid).strip()
                 guild_id = int(guild_id)
+                
+                # Check server member limit before adding
+                try:
+                    max_limit = await ServerLimitsAdapter.get_max_redeem_members_async(guild_id)
+                    if max_limit > 0:
+                        current_members = await ManageGiftCode.AutoRedeemDB.get_members_async(cog_instance, guild_id)
+                        # Check if member already exists (replacement is OK)
+                        existing_fids = {str(m.get('fid', '')).strip() for m in current_members}
+                        if fid not in existing_fids and len(current_members) >= max_limit:
+                            cog_instance.logger.warning(
+                                f"❌ Guild {guild_id} at auto-redeem member limit ({max_limit}). Rejecting FID {fid}."
+                            )
+                            return 'LIMIT_REACHED'
+                except Exception as limit_e:
+                    cog_instance.logger.debug(f"Could not check member limit: {limit_e}")
                 
                 member_data['fid'] = fid
                 member_data['added_at'] = datetime.now()
