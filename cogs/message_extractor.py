@@ -12,6 +12,7 @@ import io
 from datetime import datetime, timezone
 from typing import Optional, Literal
 from admin_utils import is_global_admin, upsert_admin, is_bot_owner
+from cogs.pagination_helper import ResultsPaginationView
 
 
 class MessageExtractor(commands.Cog):
@@ -75,12 +76,7 @@ class MessageExtractor(commands.Cog):
         
         # Create server selection view
         view = ServerSelectionView(self.bot, admin_guilds, self)
-        
-        embed = discord.Embed(
-            title="🔄 Data Synchronization",
-            description="Select a server to synchronize data from:",
-            color=discord.Color.blue()
-        )
+        embed = view.create_embed()
         
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
     
@@ -1764,33 +1760,48 @@ class ServerSelectionView(discord.ui.View):
             next_button.callback = self.next_page
             self.add_item(next_button)
     
+    def create_embed(self) -> discord.Embed:
+        """Create the embed for the current page of servers."""
+        start_idx = self.page * 25
+        end_idx = min(start_idx + 25, len(self.guilds))
+        current_guilds = self.guilds[start_idx:end_idx]
+        
+        embed = discord.Embed(
+            title="🔄 Data Synchronization",
+            description=f"Select a server to synchronize data from:\n\n"
+                       f"**Page {self.page + 1} of {self.total_pages}**",
+            color=discord.Color.blue(),
+            timestamp=datetime.now(timezone.utc)
+        )
+        
+        guild_list = []
+        for guild in current_guilds:
+            text_channels = len([c for c in guild.channels if isinstance(c, discord.TextChannel)])
+            guild_list.append(f"🔹 **{guild.name}** (`{guild.id}`)\n   └ Nodes: {guild.member_count} | Streams: {text_channels}")
+        
+        embed.description += "\n\n" + "\n".join(guild_list)
+        embed.set_footer(text=f"Total Authorized Endpoints: {len(self.guilds)}")
+        return embed
+
     async def previous_page(self, interaction: discord.Interaction):
         """Navigate to the previous page."""
         await interaction.response.defer()
-        new_page = max(0, self.page - 1)
-        view = ServerSelectionView(self.bot, self.guilds, self.cog, new_page)
+        self.page = max(0, self.page - 1)
         
-        embed = discord.Embed(
-            title="🔄 Data Synchronization",
-            description=f"Select a server to synchronize data from:\n\n"
-                       f"**Page {new_page + 1} of {self.total_pages}**",
-            color=discord.Color.blue()
-        )
+        # Re-initialize the view with the new page
+        view = ServerSelectionView(self.bot, self.guilds, self.cog, self.page)
+        embed = view.create_embed()
         
         await interaction.edit_original_response(embed=embed, view=view)
-    
+
     async def next_page(self, interaction: discord.Interaction):
         """Navigate to the next page."""
         await interaction.response.defer()
-        new_page = min(self.total_pages - 1, self.page + 1)
-        view = ServerSelectionView(self.bot, self.guilds, self.cog, new_page)
+        self.page = min(self.total_pages - 1, self.page + 1)
         
-        embed = discord.Embed(
-            title="🔄 Data Synchronization",
-            description=f"Select a server to synchronize data from:\n\n"
-                       f"**Page {new_page + 1} of {self.total_pages}**",
-            color=discord.Color.blue()
-        )
+        # Re-initialize the view with the new page
+        view = ServerSelectionView(self.bot, self.guilds, self.cog, self.page)
+        embed = view.create_embed()
         
         await interaction.edit_original_response(embed=embed, view=view)
 
@@ -1837,33 +1848,48 @@ class ServerSelectionForChannelsView(discord.ui.View):
             next_button.callback = self.next_page
             self.add_item(next_button)
     
+    def create_embed(self) -> discord.Embed:
+        """Create the embed for the current page of servers."""
+        start_idx = self.page * 25
+        end_idx = min(start_idx + 25, len(self.guilds))
+        current_guilds = self.guilds[start_idx:end_idx]
+        
+        embed = discord.Embed(
+            title="📡 Data Stream Verification",
+            description=f"Select a server to view available data streams:\n\n"
+                       f"**Page {self.page + 1} of {self.total_pages}**",
+            color=discord.Color.green(),
+            timestamp=datetime.now(timezone.utc)
+        )
+        
+        guild_list = []
+        for guild in current_guilds:
+            text_channels = len([c for c in guild.channels if isinstance(c, discord.TextChannel)])
+            guild_list.append(f"🟢 **{guild.name}** (`{guild.id}`)\n   └ Nodes: {guild.member_count} | Streams: {text_channels}")
+        
+        embed.description += "\n\n" + "\n".join(guild_list)
+        embed.set_footer(text=f"Total Authorized Endpoints: {len(self.guilds)}")
+        return embed
+
     async def previous_page(self, interaction: discord.Interaction):
         """Navigate to the previous page."""
         await interaction.response.defer()
-        new_page = max(0, self.page - 1)
-        view = ServerSelectionForChannelsView(self.bot, self.guilds, self.cog, new_page)
+        self.page = max(0, self.page - 1)
         
-        embed = discord.Embed(
-            title="📡 Data Stream Verification",
-            description=f"Select a server to view available data streams:\n\n"
-                       f"**Page {new_page + 1} of {self.total_pages}**",
-            color=discord.Color.green()
-        )
+        # Re-initialize the view with the new page
+        view = ServerSelectionForChannelsView(self.bot, self.guilds, self.cog, self.page)
+        embed = view.create_embed()
         
         await interaction.edit_original_response(embed=embed, view=view)
-    
+
     async def next_page(self, interaction: discord.Interaction):
         """Navigate to the next page."""
         await interaction.response.defer()
-        new_page = min(self.total_pages - 1, self.page + 1)
-        view = ServerSelectionForChannelsView(self.bot, self.guilds, self.cog, new_page)
+        self.page = min(self.total_pages - 1, self.page + 1)
         
-        embed = discord.Embed(
-            title="📡 Data Stream Verification",
-            description=f"Select a server to view available data streams:\n\n"
-                       f"**Page {new_page + 1} of {self.total_pages}**",
-            color=discord.Color.green()
-        )
+        # Re-initialize the view with the new page
+        view = ServerSelectionForChannelsView(self.bot, self.guilds, self.cog, self.page)
+        embed = view.create_embed()
         
         await interaction.edit_original_response(embed=embed, view=view)
 
@@ -1921,32 +1947,42 @@ class FormatSelectionView(discord.ui.View):
             )
             return
         
-        # Create embed
-        embed = discord.Embed(
-            title="🔐 Authentication Scope Verification",
-            description=f"Verified **{len(admin_guilds)}** authorized endpoint(s):",
-            color=discord.Color.blue(),
-            timestamp=datetime.now(timezone.utc)
-        )
+        # Create embeds for pagination (10 servers per page)
+        embeds = []
+        items_per_page = 10
+        total_pages = (len(admin_guilds) - 1) // items_per_page + 1
         
-        # Add server information
-        for guild in admin_guilds[:25]:  # Discord embed field limit
-            text_channels = len([c for c in guild.channels if isinstance(c, discord.TextChannel)])
-            embed.add_field(
-                name=f"🔹 {guild.name}",
-                value=f"**Endpoint:** `{guild.id}`\n"
-                      f"**Nodes:** {guild.member_count}\n"
-                      f"**Streams:** {text_channels}\n"
-                      f"**Admin:** {guild.owner.mention if guild.owner else 'Unknown'}",
-                inline=False
+        for page_num in range(total_pages):
+            embed = discord.Embed(
+                title="🔐 Authentication Scope Verification",
+                description=f"Verified **{len(admin_guilds)}** authorized endpoint(s):",
+                color=discord.Color.blue(),
+                timestamp=datetime.now(timezone.utc)
             )
+            
+            start_idx = page_num * items_per_page
+            end_idx = min(start_idx + items_per_page, len(admin_guilds))
+            page_guilds = admin_guilds[start_idx:end_idx]
+            
+            for guild in page_guilds:
+                text_channels = len([c for c in guild.channels if isinstance(c, discord.TextChannel)])
+                embed.add_field(
+                    name=f"🔹 {guild.name}",
+                    value=f"**Endpoint:** `{guild.id}`\n"
+                          f"**Nodes:** {guild.member_count}\n"
+                          f"**Streams:** {text_channels}\n"
+                          f"**Admin:** {guild.owner.mention if guild.owner else 'Unknown'}",
+                    inline=False
+                )
+            
+            embed.set_footer(text=f"Page {page_num + 1}/{total_pages} • Total: {len(admin_guilds)} server(s)")
+            embeds.append(embed)
         
-        if len(admin_guilds) > 25:
-            embed.set_footer(text=f"Showing 25 of {len(admin_guilds)} servers")
+        if len(embeds) > 1:
+            view = ResultsPaginationView(embeds, author_id=interaction.user.id)
+            await interaction.followup.send(embed=embeds[0], view=view, ephemeral=True)
         else:
-            embed.set_footer(text=f"Total: {len(admin_guilds)} server(s)")
-        
-        await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=embeds[0], ephemeral=True)
     
     @app_commands.command(
         name="verifyscope",
@@ -1984,12 +2020,7 @@ class FormatSelectionView(discord.ui.View):
         
         # Create server selection view for channel listing
         view = ServerSelectionForChannelsView(self.bot, admin_guilds, self)
-        
-        embed = discord.Embed(
-            title="📡 Data Stream Verification",
-            description="Select a server to view available data streams:",
-            color=discord.Color.green()
-        )
+        embed = view.create_embed()
         
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
