@@ -17,6 +17,7 @@ from web_api.routers.giftcodes import router as giftcodes_router
 from web_api.routers.servers import router as servers_router
 from web_api.routers.guilds import router as guilds_router
 from web_api.routers.settings import router as settings_router
+from web_api.routers.reminders import router as reminders_router
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,7 @@ app.include_router(giftcodes_router)
 app.include_router(servers_router)
 app.include_router(guilds_router)
 app.include_router(settings_router)
+app.include_router(reminders_router)
 
 os.makedirs("data/uploads", exist_ok=True)
 app.mount("/api/static", StaticFiles(directory="data/uploads"), name="static")
