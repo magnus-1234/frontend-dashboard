@@ -2190,6 +2190,60 @@ class WelcomeChannelAdapter:
             logger.error(f'Failed to get all welcome channels (async): {e}')
             return []
 
+class BirthdayChannelAdapter:
+    """Adapter for managing birthday channels in MongoDB"""
+    COLL = 'birthday_channels'
+
+    @staticmethod
+    def get(guild_id: int) -> Optional[int]:
+        try:
+            db = _get_db_main()
+            doc = db[BirthdayChannelAdapter.COLL].find_one({'_id': str(guild_id)})
+            return int(doc['channel_id']) if doc and doc.get('channel_id') else None
+        except Exception as e:
+            logger.error(f'Failed to get birthday channel for guild {guild_id}: {e}')
+            return None
+
+    @staticmethod
+    def set(guild_id: int, channel_id: int) -> bool:
+        try:
+            db = _get_db_main()
+            now = datetime.utcnow().isoformat()
+            db[BirthdayChannelAdapter.COLL].update_one(
+                {'_id': str(guild_id)},
+                {'$set': {'channel_id': int(channel_id), 'updated_at': now}, '$setOnInsert': {'created_at': now}},
+                upsert=True
+            )
+            return True
+        except Exception as e:
+            logger.error(f'Failed to set birthday channel for guild {guild_id}: {e}')
+            return False
+
+    @staticmethod
+    async def get_async(guild_id: int) -> Optional[int]:
+        try:
+            db = await _get_db_main_async()
+            doc = await db[BirthdayChannelAdapter.COLL].find_one({'_id': str(guild_id)})
+            return int(doc['channel_id']) if doc and doc.get('channel_id') else None
+        except Exception as e:
+            logger.error(f'Failed to get birthday channel (async) for guild {guild_id}: {e}')
+            return None
+
+    @staticmethod
+    async def set_async(guild_id: int, channel_id: int) -> bool:
+        try:
+            db = await _get_db_main_async()
+            now = datetime.utcnow().isoformat()
+            await db[BirthdayChannelAdapter.COLL].update_one(
+                {'_id': str(guild_id)},
+                {'$set': {'channel_id': int(channel_id), 'updated_at': now}, '$setOnInsert': {'created_at': now}},
+                upsert=True
+            )
+            return True
+        except Exception as e:
+            logger.error(f'Failed to set birthday channel (async) for guild {guild_id}: {e}')
+            return False
+
 class AdminsAdapter:
     COLL = 'admins'
 
