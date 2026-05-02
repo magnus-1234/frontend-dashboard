@@ -92,14 +92,56 @@ class WebSearch(commands.Cog):
 
     @staticmethod
     def _run_ddg(query: str, max_results: int, region: str, safesearch: str) -> list:
-        """Synchronous DuckDuckGo search (runs in thread pool)."""
-        try:
-            ddgs = DDGS()
-            results = ddgs.text(query, region=region, safesearch=safesearch, max_results=max_results)
-            return list(results) if results else []
-        except Exception as e:
-            logger.warning(f"[WebSearch] DDG error: {e}")
-            return []
+        """Synchronous DuckDuckGo search with multi-backend fallback.
+
+        Tries backends in order: api → lite → html.
+        Cloud/VM IPs are often rate-limited on the default 'api' backend,
+        so the fallback backends (lite, html) are critical for reliability.
+        """
+        import time
+
+        backends = ["api", "lite", "html"]
+        last_error = None
+
+        for backend in backends:
+            for attempt in range(2):  # 2 tries per backend
+                try:
+                    logger.info(f"[WebSearch] Trying DDG backend='{backend}' attempt={attempt+1} query='{query}'")
+                    ddgs = DDGS()
+                    results = ddgs.text(
+                        query,
+                        region=region,
+                        safesearch=safesearch,
+                        max_results=max_results,
+                        backend=backend,
+                    )
+                    results = list(results) if results else []
+                    if results:
+                        logger.info(f"[WebSearch] DDG backend='{backend}' returned {len(results)} results.")
+                        return results
+                    else:
+                        logger.warning(f"[WebSearch] DDG backend='{backend}' returned 0 results on attempt {attempt+1}.")
+                except TypeError:
+                    # Older DDGS versions don't support 'backend' param — fall back silently
+                    try:
+                        logger.warning(f"[WebSearch] backend param unsupported, retrying without it.")
+                        ddgs = DDGS()
+                        results = ddgs.text(query, region=region, safesearch=safesearch, max_results=max_results)
+                        results = list(results) if results else []
+                        if results:
+                            return results
+                    except Exception as e2:
+                        last_error = e2
+                        logger.warning(f"[WebSearch] DDG no-backend fallback error: {e2}")
+                    break  # No point trying other backends if param unsupported
+                except Exception as e:
+                    last_error = e
+                    logger.warning(f"[WebSearch] DDG backend='{backend}' attempt={attempt+1} error: {e}")
+                    if attempt == 0:
+                        time.sleep(1.5)  # Short delay before retry
+
+        logger.error(f"[WebSearch] All DDG backends exhausted. Last error: {last_error}")
+        return []
 
     @staticmethod
     def _build_ai_prompt(query: str, results: list) -> list:
