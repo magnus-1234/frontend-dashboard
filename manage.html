@@ -480,6 +480,10 @@
                     <i data-lucide="ticket"></i>
                     <span>Gift Codes</span>
                 </button>
+                <button class="nav-item" onclick="switchTab('reminders')">
+                    <i data-lucide="clock"></i>
+                    <span>Reminders</span>
+                </button>
             </div>
         </div>
 
@@ -782,6 +786,15 @@
                 <div id="giftcodes-meta" class="giftcodes-meta"></div>
                 <div id="giftcodes-list"></div>
             </div>
+
+            <!-- Reminders Tab -->
+            <div id="tab-reminders" class="tab-content">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+                    <h2 class="section-title" style="margin:0;">Manage Reminders</h2>
+                    <button onclick="openReminderModal()" class="btn btn-primary"><i data-lucide="plus"></i> New Reminder</button>
+                </div>
+                <div id="reminders-list"></div>
+            </div>
         </div>
     </div>
 
@@ -813,6 +826,36 @@
             <div class="modal-footer">
                 <button onclick="closeTranslateModal()" class="btn btn-secondary">Cancel</button>
                 <button onclick="saveTranslateConfig()" class="btn btn-primary">Save Pipeline</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reminder Modal -->
+    <div id="reminder-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>New Reminder</h3>
+                <button onclick="closeReminderModal()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Message</label>
+                    <input type="text" id="reminder-message" placeholder="e.g. Bear Trap starts now!">
+                </div>
+                <div class="form-group">
+                    <label>Time</label>
+                    <input type="text" id="reminder-time" placeholder="e.g. in 10 minutes or tomorrow at 3pm UTC">
+                </div>
+                <div class="form-group">
+                    <label>Channel</label>
+                    <select id="reminder-channel" class="guild-channels"></select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button onclick="closeReminderModal()" class="btn btn-secondary">Cancel</button>
+                <button onclick="createReminder()" class="btn btn-primary">Create Reminder</button>
             </div>
         </div>
     </div>
@@ -1396,6 +1439,97 @@
             } catch (e) {} finally { showLoading(false); }
         }
 
+        function openReminderModal() {
+            document.getElementById('reminder-message').value = '';
+            document.getElementById('reminder-time').value = '';
+            document.getElementById('reminder-modal').style.display = 'flex';
+        }
+        function closeReminderModal() { document.getElementById('reminder-modal').style.display = 'none'; }
+
+        async function createReminder() {
+            const message = document.getElementById('reminder-message').value.trim();
+            const time_str = document.getElementById('reminder-time').value.trim();
+            const channel_id = document.getElementById('reminder-channel').value;
+            
+            if (!message || !time_str || !channel_id) {
+                showNotification('Please fill in all fields', true);
+                return;
+            }
+            
+            showLoading(true);
+            try {
+                await fetchData(`/api/reminders/${guildId}`, { 
+                    method: 'POST', 
+                    body: JSON.stringify({ message, time_str, channel_id }) 
+                });
+                showNotification('Reminder created!');
+                closeReminderModal();
+                loadReminders();
+            } catch (e) {
+                showNotification(e.message || 'Failed to create reminder', true);
+            } finally { showLoading(false); }
+        }
+
+        async function deleteReminder(id) {
+            if (!confirm('Delete this reminder?')) return;
+            showLoading(true);
+            try {
+                await fetchData(`/api/reminders/${guildId}/${id}`, { method: 'DELETE' });
+                showNotification('Deleted');
+                loadReminders();
+            } catch (e) {
+                showNotification('Failed to delete reminder', true);
+            } finally { showLoading(false); }
+        }
+
+        async function loadReminders() {
+            const list = document.getElementById('reminders-list');
+            list.innerHTML = '<div class="empty-state">Loading reminders...</div>';
+            try {
+                const data = await fetchData(`/api/reminders/${guildId}`);
+                if (!data.reminders || data.reminders.length === 0) {
+                    list.innerHTML = '<div class="empty-state">No active reminders found.</div>';
+                    return;
+                }
+                
+                list.innerHTML = '';
+                list.className = 'giftcodes-grid'; // Reuse giftcode grid style
+                data.reminders.forEach(r => {
+                    const div = document.createElement('div');
+                    div.className = 'giftcode-card'; // Reuse style
+                    
+                    const time = new Date(r.reminder_time).toLocaleString();
+                    const recurring = r.is_recurring ? '<span class="status-pill active" style="margin-left: 8px; font-size: 0.7rem;">Recurring</span>' : '';
+                    
+                    div.innerHTML = `
+                        <div class="giftcode-top">
+                            <div class="giftcode-code" style="font-size: 1.1rem;">${escapeHTML(r.message)} ${recurring}</div>
+                        </div>
+                        <div class="giftcode-detail">
+                            <div class="giftcode-detail-row">
+                                <i data-lucide="clock"></i>
+                                <span><strong>Due</strong>${escapeHTML(time)}</span>
+                            </div>
+                            <div class="giftcode-detail-row">
+                                <i data-lucide="hash"></i>
+                                <span><strong>Channel</strong>${escapeHTML(r.channel_id)}</span>
+                            </div>
+                        </div>
+                        <div class="giftcode-actions" style="justify-content: flex-end;">
+                            <button class="btn btn-danger" onclick="deleteReminder(${r.id})" style="padding:8px 12px;">
+                                <i data-lucide="trash-2" style="width:15px;height:15px;"></i>
+                                Delete
+                            </button>
+                        </div>
+                    `;
+                    list.appendChild(div);
+                });
+                lucide.createIcons();
+            } catch (e) {
+                list.innerHTML = '<div class="empty-state">Failed to load reminders.</div>';
+            }
+        }
+
         (async () => {
             showLoading(true);
             try {
@@ -1431,6 +1565,7 @@
                 await loadBirthdaySettings();
                 await loadTranslateConfigs();
                 await loadGiftCodes();
+                await loadReminders();
             } catch (e) { console.error('Init error:', e); } finally { showLoading(false); }
 
             // Setup drag-and-drop on upload area (DOM guaranteed ready now)
