@@ -34,10 +34,11 @@ async def get_reminders(request: Request, guild_id: int):
         user = r.json()
         user_id = user["id"]
 
-    storage = ReminderStorage()
+    _bot = getattr(request.app.state, 'bot', None)
+    storage = getattr(_bot, 'reminder_system', None).storage if _bot and hasattr(_bot, 'reminder_system') else ReminderStorage()
+    
     reminders = storage.get_user_reminders(user_id, limit=50)
     
-    _bot = getattr(request.app.state, 'bot', None)
     guild_channel_ids = set()
     if _bot:
         guild = _bot.get_guild(guild_id)
@@ -75,7 +76,9 @@ async def create_reminder(request: Request, guild_id: int, payload: ReminderCrea
     if not reminder_time:
         raise HTTPException(status_code=400, detail="Invalid time format. Please use a format like 'in 5 minutes' or 'tomorrow at 3pm'.")
 
-    storage = ReminderStorage()
+    _bot = getattr(request.app.state, 'bot', None)
+    storage = getattr(_bot, 'reminder_system', None).storage if _bot and hasattr(_bot, 'reminder_system') else ReminderStorage()
+    
     reminder_id = storage.add_reminder(
         user_id=str(user_id),
         channel_id=str(payload.channel_id),
@@ -113,7 +116,9 @@ async def delete_reminder(request: Request, guild_id: int, reminder_id: int):
         user = r.json()
         user_id = user["id"]
 
-    storage = ReminderStorage()
+    _bot = getattr(request.app.state, 'bot', None)
+    storage = getattr(_bot, 'reminder_system', None).storage if _bot and hasattr(_bot, 'reminder_system') else ReminderStorage()
+    
     success = storage.delete_reminder(reminder_id, str(user_id))
     
     if success:
