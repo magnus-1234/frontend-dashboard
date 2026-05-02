@@ -1,13 +1,13 @@
 import asyncio
 import json
 import re
-from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException, Request, Body
-from pydantic import BaseModel
-from typing import Optional, List
 import logging
 from datetime import datetime, timezone
 from urllib.request import Request as UrlRequest, urlopen
+from typing import Optional, List
+
+from fastapi import APIRouter, HTTPException, Request, Body
+from pydantic import BaseModel
 
 try:
     from db.mongo_adapters import (
@@ -29,7 +29,7 @@ except Exception:
     get_active_gift_codes = None
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/giftcodes", tags=["Gift Codes"], redirect_slashes=False)
+router = APIRouter(prefix="/api/giftcodes", tags=["Gift Codes"])
 WOSTOOLS_GIFT_CODES_URL = "https://wostools.net/api/gift-codes"
 WOSGIFTCODES_URL = "https://wosgiftcodes.com/"
 
