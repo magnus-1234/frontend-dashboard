@@ -427,6 +427,106 @@
         .giftcode-actions { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:auto; padding-top:12px; border-top:1px solid var(--glass-border); }
         .giftcode-source { color:var(--text-muted); font-size:0.76rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .empty-state { text-align:center; padding:42px 20px; color:var(--text-muted); background:#16191f; border:1px solid var(--glass-border); border-radius:12px; }
+        .giftcode-source { color:var(--text-muted); font-size:0.76rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .empty-state { text-align:center; padding:42px 20px; color:var(--text-muted); background:#16191f; border:1px solid var(--glass-border); border-radius:12px; }
+
+        /* ── Manual Redemption Styles ───────────────── */
+        .manual-redeem-card {
+            background: linear-gradient(145deg, #1e2229 0%, #16191f 100%);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 32px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        }
+        .redeem-grid {
+            display: grid;
+            grid-template-columns: 1.2fr 2fr;
+            gap: 24px;
+        }
+        @media(max-width: 900px) { .redeem-grid { grid-template-columns: 1fr; } }
+        
+        .player-input-wrap { display: flex; gap: 10px; margin-bottom: 16px; }
+        .player-info-display {
+            background: rgba(0,0,0,0.2);
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            min-height: 80px;
+            border: 1px solid rgba(255,255,255,0.03);
+        }
+        .player-avatar-large {
+            width: 56px;
+            height: 56px;
+            border-radius: 12px;
+            background: #232831;
+            object-fit: cover;
+        }
+        .player-meta h4 { font-family: 'Outfit', sans-serif; font-size: 1.1rem; margin-bottom: 2px; color: #fff; }
+        .player-meta p { font-size: 0.85rem; color: var(--text-muted); }
+
+        .code-selector-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 10px;
+            max-height: 240px;
+            overflow-y: auto;
+            padding-right: 8px;
+        }
+        .selectable-code {
+            background: #232831;
+            border: 1px solid var(--glass-border);
+            border-radius: 10px;
+            padding: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+            position: relative;
+        }
+        .selectable-code:hover { border-color: var(--primary); background: rgba(139, 92, 246, 0.05); }
+        .selectable-code.selected {
+            background: rgba(139, 92, 246, 0.15);
+            border-color: var(--primary);
+            box-shadow: 0 0 15px rgba(139, 92, 246, 0.2);
+        }
+        .selectable-code .check-icon {
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            background: var(--primary);
+            color: #fff;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            border: 2px solid #16191f;
+        }
+        .selectable-code.selected .check-icon { display: flex; }
+        .code-text { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.9rem; }
+
+        .redemption-results {
+            margin-top: 20px;
+            display: grid;
+            gap: 8px;
+        }
+        .result-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 16px;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.03);
+            font-size: 0.9rem;
+        }
+        .result-item.success { border-left: 3px solid #10b981; }
+        .result-item.already { border-left: 3px solid var(--primary); }
+        .result-item.failed { border-left: 3px solid #ef4444; }
+
         @media(max-width:700px) {
             .giftcodes-header { flex-direction:column; }
             .giftcodes-header .btn { width:100%; justify-content:center; }
@@ -880,14 +980,68 @@
             <div id="tab-giftcodes" class="tab-content">
                 <div class="giftcodes-header">
                     <div>
-                        <h2 class="section-title" style="margin-bottom:0;">Active Gift Codes</h2>
-                        <p>The latest &amp; fastest WOS gift codes — pulled directly from the bot. 🚀</p>
+                        <h2 class="section-title" style="margin-bottom:0;">Gift Code Management</h2>
+                        <p>Redeem codes manually or view active codes pulled from the bot. 🚀</p>
                     </div>
                     <button onclick="loadGiftCodes(true)" class="btn btn-secondary">
                         <i data-lucide="refresh-cw" style="width:16px;height:16px;"></i>
                         Refresh
                     </button>
                 </div>
+
+                <!-- Manual Redemption Section -->
+                <div class="manual-redeem-card">
+                    <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
+                        <div style="background: var(--primary); width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                            <i data-lucide="zap" style="width: 18px; color: #fff;"></i>
+                        </div>
+                        <h3 style="font-family: 'Outfit', sans-serif; font-size: 1.2rem; font-weight: 700;">Manual Redemption</h3>
+                    </div>
+
+                    <div class="redeem-grid">
+                        <div class="redeem-left">
+                            <div class="form-group">
+                                <label>Enter Player FID</label>
+                                <div class="player-input-wrap">
+                                    <input type="text" id="redeem-fid" placeholder="e.g. 123456789" maxlength="9">
+                                    <button onclick="fetchPlayerInfo()" class="btn btn-primary" id="fetch-player-btn">
+                                        <i data-lucide="search" style="width: 16px;"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div id="player-info-container" class="player-info-display">
+                                <div style="color: var(--text-muted); font-size: 0.9rem; text-align: center; width: 100%;">
+                                    Enter FID and search to fetch player details
+                                </div>
+                            </div>
+
+                            <div style="margin-top: 24px;">
+                                <button id="redeem-submit-btn" onclick="redeemSelectedCodes()" class="btn btn-primary" style="width: 100%; justify-content: center; height: 48px; border-radius: 12px; font-size: 1rem;" disabled>
+                                    <i data-lucide="gift"></i>
+                                    Redeem Selected Codes
+                                </button>
+                                <p id="redeem-selection-count" style="text-align: center; font-size: 0.8rem; color: var(--text-muted); margin-top: 8px;">0 codes selected</p>
+                            </div>
+                        </div>
+
+                        <div class="redeem-right">
+                            <label style="display: block; margin-bottom: 12px; font-size: 0.85rem; font-weight: 600; color: var(--text-muted);">Select Codes to Redeem</label>
+                            <div id="selectable-codes-list" class="code-selector-grid">
+                                <div style="color: var(--text-muted); font-size: 0.9rem; padding: 20px;">Loading active codes...</div>
+                            </div>
+                            
+                            <div id="redemption-results" class="redemption-results">
+                                <!-- Results will appear here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 style="font-family: 'Outfit', sans-serif; font-size: 1.1rem; font-weight: 700; margin: 32px 0 16px 0; display: flex; align-items: center; gap: 10px;">
+                    <i data-lucide="list" style="width: 18px; color: var(--primary);"></i>
+                    Active Codes Directory
+                </h3>
                 <div id="giftcodes-meta" class="giftcodes-meta"></div>
                 <div id="giftcodes-list"></div>
             </div>
@@ -1712,9 +1866,177 @@
                     button.addEventListener('click', () => copyGiftCode(button.dataset.code));
                 });
                 lucide.createIcons();
+                
+                // Also update the selectable codes for manual redemption
+                populateSelectableCodes(activeCodes);
             } catch (e) {
                 list.className = '';
                 list.innerHTML = '<div class="empty-state">Could not load gift codes. Try refreshing in a moment.</div>';
+            }
+        }
+
+        // ──────────────────────────────────────────────────
+        //  Manual Redemption Logic
+        // ──────────────────────────────────────────────────
+        let selectedCodes = new Set();
+        let currentPlayer = null;
+
+        function populateSelectableCodes(codes) {
+            const list = document.getElementById('selectable-codes-list');
+            if (!list) return;
+            
+            list.innerHTML = '';
+            if (codes.length === 0) {
+                list.innerHTML = '<div style="color: var(--text-muted); font-size: 0.9rem; padding: 20px;">No active codes available.</div>';
+                return;
+            }
+
+            codes.forEach(code => {
+                const codeText = code.code;
+                const div = document.createElement('div');
+                div.className = `selectable-code ${selectedCodes.has(codeText) ? 'selected' : ''}`;
+                div.onclick = () => toggleCodeSelection(codeText, div);
+                div.innerHTML = `
+                    <div class="check-icon"><i data-lucide="check" style="width: 10px;"></i></div>
+                    <div class="code-text">${escapeHTML(codeText)}</div>
+                `;
+                list.appendChild(div);
+            });
+            lucide.createIcons();
+        }
+
+        function toggleCodeSelection(code, element) {
+            if (selectedCodes.has(code)) {
+                selectedCodes.delete(code);
+                element.classList.remove('selected');
+            } else {
+                selectedCodes.add(code);
+                element.classList.add('selected');
+            }
+            updateRedeemButtonState();
+        }
+
+        function updateRedeemButtonState() {
+            const btn = document.getElementById('redeem-submit-btn');
+            const countText = document.getElementById('redeem-selection-count');
+            const count = selectedCodes.size;
+            
+            btn.disabled = !(count > 0 && currentPlayer);
+            countText.textContent = `${count} ${count === 1 ? 'code' : 'codes'} selected`;
+        }
+
+        async function fetchPlayerInfo() {
+            const fidInput = document.getElementById('redeem-fid');
+            const fid = fidInput.value.trim();
+            const container = document.getElementById('player-info-container');
+            const btn = document.getElementById('fetch-player-btn');
+
+            if (!fid || fid.length !== 9 || !/^\d+$/.test(fid)) {
+                showNotification('Please enter a valid 9-digit FID', true);
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<i data-lucide="loader-2" style="width: 16px; animation: spin 1s linear infinite;"></i>';
+            lucide.createIcons();
+            
+            try {
+                const res = await fetchData('/api/giftcodes/player-info', {
+                    method: 'POST',
+                    body: JSON.stringify({ fid })
+                });
+
+                if (res.status === 'success') {
+                    currentPlayer = res.data;
+                    container.innerHTML = `
+                        <img src="${res.data.avatar_image || 'https://cdn.discordapp.com/embed/avatars/0.png'}" class="player-avatar-large" alt="Avatar">
+                        <div class="player-meta">
+                            <h4>${escapeHTML(res.data.nickname)}</h4>
+                            <p>FID: ${res.data.fid} • ${res.data.furnace_lv_formatted}</p>
+                        </div>
+                    `;
+                    updateRedeemButtonState();
+                }
+            } catch (e) {
+                container.innerHTML = `<div style="color: #ef4444; font-size: 0.9rem; text-align: center; width: 100%;">Player not found or error fetching data</div>`;
+                currentPlayer = null;
+                updateRedeemButtonState();
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i data-lucide="search" style="width: 16px;"></i>';
+                lucide.createIcons();
+            }
+        }
+
+        async function redeemSelectedCodes() {
+            if (!currentPlayer || selectedCodes.size === 0) return;
+            
+            const btn = document.getElementById('redeem-submit-btn');
+            const resultsContainer = document.getElementById('redemption-results');
+            
+            btn.disabled = true;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i data-lucide="loader-2" style="width: 18px; animation: spin 1s linear infinite;"></i> Processing Redemption...';
+            lucide.createIcons();
+            
+            resultsContainer.innerHTML = '<div style="padding: 10px; color: var(--text-muted); font-size: 0.9rem;">Redeeming codes one by one...</div>';
+
+            try {
+                const codesArray = Array.from(selectedCodes);
+                const res = await fetchData('/api/giftcodes/redeem', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        fid: currentPlayer.fid,
+                        codes: codesArray,
+                        guild_id: guildId
+                    })
+                });
+
+                if (res.status === 'success') {
+                    resultsContainer.innerHTML = '';
+                    res.results.forEach(result => {
+                        const div = document.createElement('div');
+                        let statusClass = 'failed';
+                        let icon = 'x-circle';
+                        let statusText = result.status;
+
+                        if (result.success) {
+                            statusClass = 'success';
+                            icon = 'check-circle';
+                            statusText = 'Successfully Redeemed';
+                        } else if (result.already_redeemed) {
+                            statusClass = 'already';
+                            icon = 'info';
+                            statusText = 'Already Claimed';
+                        } else if (result.status === 'SAME TYPE EXCHANGE') {
+                            statusClass = 'already';
+                            icon = 'info';
+                            statusText = 'Same Type Already Claimed';
+                        }
+
+                        div.className = `result-item ${statusClass}`;
+                        div.innerHTML = `
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <i data-lucide="${icon}" style="width: 16px;"></i>
+                                <span style="font-weight: 600;">${result.code}</span>
+                            </div>
+                            <span style="font-size: 0.8rem; opacity: 0.8;">${statusText}</span>
+                        `;
+                        resultsContainer.appendChild(div);
+                    });
+                    
+                    showNotification('Redemption process completed');
+                    // Refresh stats and codes list
+                    loadGiftStats();
+                    loadGiftCodes();
+                }
+            } catch (e) {
+                showNotification('Error during redemption process', true);
+                resultsContainer.innerHTML = `<div style="padding: 10px; color: #ef4444; font-size: 0.9rem;">Failed to process redemption: ${e.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+                lucide.createIcons();
             }
         }
 
