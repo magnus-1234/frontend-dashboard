@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Request
 import logging
@@ -18,6 +19,7 @@ except Exception:
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/giftcodes", tags=["Gift Codes"], redirect_slashes=False)
 WOSTOOLS_GIFT_CODES_URL = "https://wostools.net/api/gift-codes"
+WOSGIFTCODES_URL = "https://wosgiftcodes.com/"
 
 @router.get("")
 @router.get("/")
@@ -48,6 +50,15 @@ async def get_active_giftcodes(request: Request):
         except Exception as e:
             logger.warning(f"Bot giftcode scraper failed, falling back: {e}")
 
+    # Try wosgiftcodes.com first (has real reward details in the HTML table)
+    wgc_codes = await _fetch_wosgiftcodes_active_codes()
+    if wgc_codes:
+        return {
+            "codes": wgc_codes,
+            "source": "wosgiftcodes",
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+        }
+
     direct_codes = await _fetch_wostools_active_codes()
     if direct_codes:
         return {
@@ -64,27 +75,32 @@ async def get_active_giftcodes(request: Request):
                 "last_updated": datetime.now(timezone.utc).isoformat(),
             }
 
-        # Fetch bot DB codes and WosTools enrichment data in parallel
+        # Fetch bot DB codes + two enrichment sources in parallel
         raw_task = GiftCodesAdapter.get_all_with_status_async()
+        wgc_task  = _fetch_wosgiftcodes_active_codes()
         wostools_task = _fetch_wostools_active_codes()
-        raw, wostools_codes = await asyncio.gather(raw_task, wostools_task, return_exceptions=True)
+        raw, wgc_codes, wostools_codes = await asyncio.gather(
+            raw_task, wgc_task, wostools_task, return_exceptions=True
+        )
 
         if isinstance(raw, Exception):
             logger.error(f"DB fetch failed: {raw}")
             raw = []
 
-        # Build a lookup map: normalized_code -> wostools details
-        wostools_map: dict = {}
-        if isinstance(wostools_codes, list):
-            for wc in wostools_codes:
-                key = str(wc.get("code") or "").strip().upper()
-                if key:
-                    wostools_map[key] = wc
+        # Build enrichment map: UPPER(code) -> details dict
+        # Priority: wosgiftcodes.com (has rewards) > WosTools
+        enrichment_map: dict = {}
+        for source_list in [wostools_codes, wgc_codes]:   # wgc last = highest priority
+            if isinstance(source_list, list):
+                for item in source_list:
+                    key = str(item.get("code") or "").strip().upper()
+                    if key:
+                        enrichment_map[key] = item
 
         codes = [
             code
             for code in (
-                _normalize_database_code_rich(c, wostools_map)
+                _normalize_database_code_rich(c, enrichment_map)
                 for c in raw
             )
             if code["is_active"]
@@ -136,6 +152,85 @@ def _normalize_bot_cog_code(code: str, expiry: str) -> dict:
         "validation_status": "active",
         "is_active": True,
     }
+
+
+async def _fetch_wosgiftcodes_active_codes() -> list[dict]:
+    """Scrape active gift codes + reward details from wosgiftcodes.com HTML table."""
+    def _scrape() -> list[dict]:
+        req = UrlRequest(
+            WOSGIFTCODES_URL,
+            headers={
+                "Accept": "text/html,application/xhtml+xml",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
+            },
+        )
+        with urlopen(req, timeout=12) as resp:
+            html = resp.read().decode("utf-8", errors="replace")
+
+        # Extract <tr> rows from the active codes table
+        # Each row has: code | rewards | expiry | status
+        results = []
+
+        # Find rows inside the active codes section (before the "Expired Codes" heading)
+        active_section = html
+        expired_idx = html.lower().find("expired code")
+        if expired_idx > 0:
+            active_section = html[:expired_idx]
+
+        # Match table rows: <tr ...> cells </tr>
+        row_pattern = re.compile(r"<tr[^>]*>(.*?)</tr>", re.DOTALL | re.IGNORECASE)
+        cell_pattern = re.compile(r"<t[dh][^>]*>(.*?)</t[dh]>", re.DOTALL | re.IGNORECASE)
+        tag_re = re.compile(r"<[^>]+>")
+
+        def strip_tags(s: str) -> str:
+            return tag_re.sub("", s).strip()
+
+        for row_m in row_pattern.finditer(active_section):
+            row_html = row_m.group(1)
+            cells = [strip_tags(c.group(1)) for c in cell_pattern.finditer(row_html)]
+            # Skip header rows or rows with fewer than 2 cells
+            if len(cells) < 2:
+                continue
+            code = cells[0].strip()
+            # Skip obvious non-code rows (empty, "Code", "Gift Code" headers)
+            if not code or code.lower() in ("code", "gift code", "gift codes", "#", "status", "reward", "rewards"):
+                continue
+            # Code should look like a gift code: alphanumeric, 4-30 chars
+            if not re.match(r"^[A-Za-z0-9]{4,30}$", code):
+                continue
+
+            rewards = cells[1].strip() if len(cells) > 1 else "Rewards not specified"
+            expiry  = cells[2].strip() if len(cells) > 2 else "Unknown"
+            status  = cells[3].strip().lower() if len(cells) > 3 else "active"
+
+            # Only keep active codes
+            if status and status not in ("active", ""):
+                continue
+            if not rewards or rewards.lower() in ("", "n/a", "-"):
+                rewards = "Rewards not specified"
+            if not expiry or expiry.lower() in ("", "n/a", "-"):
+                expiry = "Unknown"
+
+            results.append({
+                "code": code,
+                "rewards": rewards,
+                "expiry": expiry,
+                "description": rewards,
+                "source": "wosgiftcodes",
+                "date_added": "",
+                "status": "active",
+                "validation_status": "active",
+                "is_active": True,
+            })
+
+        return results
+
+    try:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, _scrape)
+    except Exception as e:
+        logger.warning(f"wosgiftcodes.com scrape failed: {e}")
+        return []
 
 
 async def _fetch_wostools_active_codes() -> list[dict]:
