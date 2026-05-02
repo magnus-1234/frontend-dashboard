@@ -64,15 +64,34 @@ async def get_active_giftcodes(request: Request):
                 "last_updated": datetime.now(timezone.utc).isoformat(),
             }
 
-        raw = await GiftCodesAdapter.get_all_with_status_async()
+        # Fetch bot DB codes and WosTools enrichment data in parallel
+        raw_task = GiftCodesAdapter.get_all_with_status_async()
+        wostools_task = _fetch_wostools_active_codes()
+        raw, wostools_codes = await asyncio.gather(raw_task, wostools_task, return_exceptions=True)
+
+        if isinstance(raw, Exception):
+            logger.error(f"DB fetch failed: {raw}")
+            raw = []
+
+        # Build a lookup map: normalized_code -> wostools details
+        wostools_map: dict = {}
+        if isinstance(wostools_codes, list):
+            for wc in wostools_codes:
+                key = str(wc.get("code") or "").strip().upper()
+                if key:
+                    wostools_map[key] = wc
+
         codes = [
             code
-            for code in (_normalize_database_code_rich(c) for c in raw)
+            for code in (
+                _normalize_database_code_rich(c, wostools_map)
+                for c in raw
+            )
             if code["is_active"]
         ]
         return {
             "codes": codes,
-            "source": "database",
+            "source": "bot_database",
             "last_updated": datetime.now(timezone.utc).isoformat(),
         }
     except Exception as e:
@@ -223,19 +242,27 @@ def _normalize_database_code(code_tuple) -> dict:
     }
 
 
-def _normalize_database_code_rich(doc: dict) -> dict:
-    """Rich normalizer using the full document from get_all_with_status_async."""
+def _normalize_database_code_rich(doc: dict, wostools_map: dict | None = None) -> dict:
+    """Rich normalizer using the full document from get_all_with_status_async.
+    Optionally enriches rewards/expiry from a wostools_map keyed by UPPERCASED code.
+    """
     status = str(doc.get("validation_status") or "").strip().lower()
-    # 'pending' = freshly scraped by bot, not yet redeemed/validated → show as active
-    is_active = status in ("valid", "active", "pending")
+    # 'pending' / '' = freshly scraped by bot, not yet redeemed/validated → still show
+    is_active = status in ("valid", "active", "pending", "posted", "")
     code = str(doc.get("giftcode") or "").strip()
     date_added = doc.get("created_at") or doc.get("date") or ""
     updated_at = doc.get("updated_at") or ""
+
+    # Enrich from WosTools if available
+    enrichment = (wostools_map or {}).get(code.upper(), {})
+    rewards = _first_present(enrichment, ["rewards", "reward", "rewardText", "description"], "Rewards not specified")
+    expiry  = _first_present(enrichment, ["expiry", "expires", "expiresAt", "expiration"], "Unknown")
+
     return {
         "code": code,
-        "rewards": "Rewards not specified",
-        "expiry": "Unknown",
-        "description": "",
+        "rewards": rewards,
+        "expiry": expiry,
+        "description": _first_present(enrichment, ["description", "label"]),
         "source": "bot_database",
         "date_added": date_added,
         "updated_at": updated_at,
