@@ -11,8 +11,11 @@ router = APIRouter(prefix="/api/reminders", tags=["Reminders"])
 
 class ReminderCreate(BaseModel):
     message: str
-    time_str: str
     channel_id: str
+    time_str: str = None
+    target_time: str = None  # ISO format from frontend
+    recurrence_type: str = "none" # none, daily, weekly, custom
+    recurrence_interval: int = 1
     body: str = None
     mention: str = "everyone"
     image_url: str = None
@@ -76,9 +79,31 @@ async def create_reminder(request: Request, guild_id: int, payload: ReminderCrea
         user_id = user["id"]
 
     # Parse time
-    reminder_time, recurring_info = TimeParser.parse_time_string(payload.time_str)
+    reminder_time = None
+    recurring_info = {}
+    
+    if payload.target_time:
+        try:
+            # datetime-local format is often YYYY-MM-DDTHH:MM
+            reminder_time = datetime.fromisoformat(payload.target_time.replace('Z', ''))
+            
+            if payload.recurrence_type != "none":
+                recurring_info = {
+                    "is_recurring": True,
+                    "type": payload.recurrence_type,
+                    "interval": payload.recurrence_interval if payload.recurrence_type == "custom" else 1,
+                    "pattern": f"Structured: {payload.recurrence_type}"
+                }
+                if payload.recurrence_type == "weekly":
+                    recurring_info["interval"] = 7
+        except Exception as e:
+            logger.error(f"Error parsing target_time: {e}")
+
+    if not reminder_time and payload.time_str:
+        reminder_time, recurring_info = TimeParser.parse_time_string(payload.time_str)
+        
     if not reminder_time:
-        raise HTTPException(status_code=400, detail="Invalid time format. Please use a format like 'in 5 minutes' or 'tomorrow at 3pm'.")
+        raise HTTPException(status_code=400, detail="Invalid time format. Please select a date/time or provide a time string.")
 
     _bot = getattr(request.app.state, 'bot', None)
     storage = getattr(_bot, 'reminder_system', None).storage if _bot and hasattr(_bot, 'reminder_system') else ReminderStorage()
@@ -149,8 +174,28 @@ async def update_reminder(request: Request, guild_id: int, reminder_id: str, pay
         user = r.json()
         user_id = user["id"]
 
-    # Re-parse time in case it changed
-    reminder_time, recurring_info = TimeParser.parse_time_string(payload.time_str)
+    # Parse time
+    reminder_time = None
+    recurring_info = {}
+    
+    if payload.target_time:
+        try:
+            reminder_time = datetime.fromisoformat(payload.target_time.replace('Z', ''))
+            if payload.recurrence_type != "none":
+                recurring_info = {
+                    "is_recurring": True,
+                    "type": payload.recurrence_type,
+                    "interval": payload.recurrence_interval if payload.recurrence_type == "custom" else 1,
+                    "pattern": f"Structured: {payload.recurrence_type}"
+                }
+                if payload.recurrence_type == "weekly":
+                    recurring_info["interval"] = 7
+        except Exception as e:
+            logger.error(f"Error parsing target_time: {e}")
+
+    if not reminder_time and payload.time_str:
+        reminder_time, recurring_info = TimeParser.parse_time_string(payload.time_str)
+
     if not reminder_time:
          raise HTTPException(status_code=400, detail="Invalid time format.")
 
