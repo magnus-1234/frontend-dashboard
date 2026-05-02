@@ -404,3 +404,98 @@ async def get_giftcode_stats(guild_id: int):
 async def add_giftcode(code: str, reward_text: str = ""):
     """Add a new giftcode from the web dashboard."""
     return {"status": "success", "message": f"Code {code} added."}
+
+@router.post("/player-info")
+async def get_player_info_api(request: Request):
+    """Fetch player information for a given FID."""
+    try:
+        body = await request.json()
+        fid = body.get("fid")
+        if not fid:
+            raise HTTPException(status_code=400, detail="FID is required")
+        
+        # Clean FID
+        fid = ''.join(c for c in str(fid) if c.isdigit())
+        if len(fid) != 9:
+            raise HTTPException(status_code=400, detail="FID must be exactly 9 digits")
+
+        bot = getattr(request.app.state, "bot", None)
+        if bot is None:
+             raise HTTPException(status_code=503, detail="Bot instance not available")
+             
+        manage_cog = bot.get_cog("ManageGiftCode")
+        if manage_cog is None:
+             raise HTTPException(status_code=503, detail="Gift Code management module not available")
+
+        player_data = await manage_cog.fetch_player_data(fid)
+        if not player_data:
+            raise HTTPException(status_code=404, detail="Player not found or API error")
+            
+        return {
+            "status": "success",
+            "data": {
+                "fid": fid,
+                "nickname": player_data.get("nickname"),
+                "furnace_lv": player_data.get("furnace_lv"),
+                "furnace_lv_formatted": manage_cog.format_furnace_level(player_data.get("furnace_lv", 0)),
+                "avatar_image": player_data.get("avatar_image")
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching player info: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/redeem")
+async def redeem_giftcodes_api(request: Request):
+    """Manually redeem gift codes for a player."""
+    try:
+        body = await request.json()
+        fid = body.get("fid")
+        codes = body.get("codes", [])
+        guild_id = body.get("guild_id")
+        
+        if not fid or not codes:
+            raise HTTPException(status_code=400, detail="FID and codes are required")
+        
+        # Clean FID
+        fid = ''.join(c for c in str(fid) if c.isdigit())
+        
+        bot = getattr(request.app.state, "bot", None)
+        if bot is None:
+             raise HTTPException(status_code=503, detail="Bot instance not available")
+             
+        manage_cog = bot.get_cog("ManageGiftCode")
+        if manage_cog is None:
+             raise HTTPException(status_code=503, detail="Gift Code management module not available")
+
+        # Fetch player data to get current nickname/level
+        player_data = await manage_cog.fetch_player_data(fid)
+        nickname = player_data.get("nickname", "Unknown") if player_data else "Unknown"
+        furnace_lv = player_data.get("furnace_lv", 0) if player_data else 0
+
+        results = []
+        for code in codes:
+            # We use the internal _redeem_for_member logic
+            status, success, already_redeemed, failed = await manage_cog._redeem_for_member(
+                int(guild_id) if guild_id else 0, fid, nickname, furnace_lv, code
+            )
+            
+            results.append({
+                "code": code,
+                "status": status,
+                "success": bool(success),
+                "already_redeemed": bool(already_redeemed),
+                "failed": bool(failed)
+            })
+            
+        return {
+            "status": "success",
+            "results": results
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error redeeming giftcodes: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
