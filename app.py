@@ -972,7 +972,7 @@ async def setup_hook():
     try:
         from web_api.server import start_web_server
         # Run start_web_server as a background task so it doesn't block setup_hook
-        bot.loop.create_task(start_web_server())
+        bot.loop.create_task(start_web_server(bot))
     except Exception as e:
         logger.error(f"❌ Failed to start web server: {e}")
     

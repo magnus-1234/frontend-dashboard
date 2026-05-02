@@ -56,8 +56,9 @@ app.include_router(servers_router)
 app.include_router(guilds_router)
 app.include_router(settings_router)
 
-async def start_web_server(port: int = 8080):
+async def start_web_server(bot=None, port: int = 8080):
     """Starts the FastAPI server on the existing asyncio loop."""
+    app.state.bot = bot
     config = uvicorn.Config(
         app=app,
         host="0.0.0.0",

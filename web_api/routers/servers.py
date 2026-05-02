@@ -7,12 +7,6 @@ try:
 except ImportError:
     mongo_enabled = lambda: False
 
-# Try to access the bot instance for real guild presence
-try:
-    import app as bot_app
-    _bot = getattr(bot_app, 'bot', None)
-except Exception:
-    _bot = None
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/servers", tags=["Servers"], redirect_slashes=False)
@@ -37,6 +31,7 @@ async def get_user_servers(request: Request):
 
     # Get IDs of guilds the bot is in (from bot cache if available)
     bot_guild_ids: set = set()
+    _bot = getattr(request.app.state, 'bot', None)
     if _bot is not None:
         try:
             bot_guild_ids = {str(g.id) for g in _bot.guilds}
