@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Server - Whiteout Survival Bot</title>
+    <!-- Modern Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        :root {
+            --primary: #5865F2;
+            --primary-hover: #4752C4;
+            --accent: #ff8b6b;
+            --bg-dark: #0a0a0c;
+            --sidebar-bg: #111214;
+            --card-bg: #1e1f22;
+            --glass-bg: rgba(30, 31, 34, 0.65);
+            --glass-border: rgba(255, 255, 255, 0.06);
+            --text-main: #f2f3f5;
+            --text-muted: #949ba4;
+            --sidebar-width: 280px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* Sidebar Styling */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: var(--sidebar-bg);
+            border-right: 1px solid var(--glass-border);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            z-index: 100;
+        }
+
+        .sidebar-header {
+            padding: 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-bottom: 1px solid var(--glass-border);
+        }
+
+        .sidebar-header img {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+        }
+
+        .sidebar-header h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 700;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .guild-info-box {
+            padding: 20px;
+            margin: 16px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .guild-info-box img {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: #2b2d31;
+        }
+
+        .guild-info-text h3 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .guild-info-text p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .sidebar-nav {
+            flex: 1;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .nav-item {
+            padding: 10px 16px;
+            border-radius: 8px;
+            color: var(--text-muted);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 500;
+            transition: all 0.2s;
+            cursor: pointer;
+            border: none;
+            background: transparent;
+            width: 100%;
+            text-align: left;
+            font-size: 0.95rem;
+        }
+
+        .nav-item i {
+            width: 20px;
+            height: 20px;
+        }
+
+        .nav-item:hover {
+            background: rgba(255,255,255,0.05);
+            color: var(--text-main);
+        }
+
+        .nav-item.active {
+            background: var(--primary);
+            color: #fff;
+        }
+
+        .sidebar-footer {
+            padding: 20px;
+            border-top: 1px solid var(--glass-border);
+        }
+
+        /* Main Content Area */
+        .main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: #1e1f22;
+        }
+
+        .top-bar {
+            height: 64px;
+            padding: 0 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #1e1f22;
+            border-bottom: 1px solid var(--glass-border);
+        }
+
+        .top-bar h2 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.2rem;
+            font-weight: 700;
+        }
+
+        .content-scroll {
+            flex: 1;
+            overflow-y: auto;
+            padding: 32px;
+            background-image: 
+                radial-gradient(circle at 0% 0%, rgba(88, 101, 242, 0.03), transparent 40%),
+                radial-gradient(circle at 100% 100%, rgba(255, 139, 107, 0.02), transparent 40%);
+        }
+
+        /* Professional Cards */
+        .card {
+            background: #2b2d31;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .card-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        /* Form Controls */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        input[type="text"], select, textarea {
+            width: 100%;
+            background: #1e1f22;
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            padding: 12px 16px;
+            color: #fff;
+            font-family: inherit;
+            font-size: 0.95rem;
+            transition: border-color 0.2s;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .full-width { width: 100%; }
+
+        /* Buttons */
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn.primary { background: var(--primary); color: #fff; }
+        .btn.primary:hover { background: var(--primary-hover); transform: translateY(-1px); }
+        .btn.secondary { background: #4e5058; color: #fff; }
+        .btn.secondary:hover { background: #6d6f78; }
+        .btn.danger { background: #da373c; color: #fff; }
+        .btn.danger:hover { background: #a1282c; }
+
+        /* Switches */
+        .switch-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 48px;
+            height: 24px;
+        }
+
+        .switch input { opacity: 0; width: 0; height: 0; }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #4e5058;
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px; width: 18px;
+            left: 3px; bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider { background-color: var(--primary); }
+        input:checked + .slider:before { transform: translateX(24px); }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: #2b2d31;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid var(--glass-border);
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: var(--primary);
+            margin-bottom: 4px;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        /* Tab Content */
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeIn 0.3s ease-out; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* List Items (Giftcodes, Translate) */
+        .config-item, .gift-code-item {
+            background: #232428;
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s;
+        }
+
+        .config-item:hover { border-color: var(--primary); background: #2b2d31; }
+
+        .config-info h4 { margin: 0 0 4px 0; font-size: 1rem; color: #fff; }
+        .config-info p { margin: 0; font-size: 0.85rem; color: var(--text-muted); }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0; top: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(4px);
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: #313338;
+            border-radius: 16px;
+            width: 520px;
+            max-width: 95%;
+            box-shadow: 0 24px 48px rgba(0,0,0,0.4);
+            overflow: hidden;
+        }
+
+        .modal-header { padding: 24px; background: #2b2d31; display: flex; justify-content: space-between; align-items: center; }
+        .modal-body { padding: 24px; max-height: 70vh; overflow-y: auto; }
+        .modal-footer { padding: 16px 24px; background: #2b2d31; display: flex; justify-content: flex-end; gap: 12px; }
+
+        /* Loading & Notifications */
+        .loading-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+        }
+
+        .spinner {
+            width: 40px; height: 40px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .notification {
+            position: fixed;
+            bottom: 24px; right: 24px;
+            padding: 16px 24px;
+            border-radius: 8px;
+            background: #23a559;
+            color: #fff;
+            font-weight: 600;
+            transform: translateY(100px);
+            transition: all 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+            z-index: 3000;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+            display: flex; align-items: center; gap: 12px;
+        }
+
+        .notification.show { transform: translateY(0); }
+        .notification.error { background: #f23f42; }
+
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #4e5058; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6d6f78; }
+    </style>
+</head>
+
+<body>
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <img src="https://cdn.discordapp.com/avatars/1399025185046134866/0b02020a0f6e2c4effffa9e9502f427c.png" alt="Bot Avatar">
+            <h1>ICEAngel Admin</h1>
+        </div>
+
+        <div class="guild-info-box">
+            <img id="guild-icon-sidebar" src="" alt="Server Icon">
+            <div class="guild-info-text">
+                <h3 id="guild-name-sidebar">Loading...</h3>
+                <p id="guild-member-sidebar">0 Members</p>
+            </div>
+        </div>
+
+        <nav class="sidebar-nav">
+            <button class="nav-item active" onclick="switchTab('welcome')">
+                <i data-lucide="message-square"></i>
+                <span>Welcome Channel</span>
+            </button>
+            <button class="nav-item" onclick="switchTab('translate')">
+                <i data-lucide="languages"></i>
+                <span>Auto Translate</span>
+            </button>
+            <button class="nav-item" onclick="switchTab('birthday')">
+                <i data-lucide="cake"></i>
+                <span>Birthday Settings</span>
+            </button>
+            <button class="nav-item" onclick="switchTab('giftcodes')">
+                <i data-lucide="ticket"></i>
+                <span>Gift Codes</span>
+            </button>
+        </nav>
+
+        <div class="sidebar-footer">
+            <button class="nav-item" onclick="window.location.href='dashboard.html'">
+                <i data-lucide="layout-grid"></i>
+                <span>Back to Servers</span>
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="main-container">
+        <header class="top-bar">
+            <h2 id="current-tab-title">Welcome Channel</h2>
+            <div class="header-actions">
+                <!-- Can add user profile here -->
+            </div>
+        </header>
+
+        <div class="content-scroll">
+            <!-- Statistics Overview (Sticky at top of content) -->
+            <div class="stats-grid" id="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-translations">0</div>
+                    <div class="stat-label">Translations</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-redemptions">0</div>
+                    <div class="stat-label">Redemptions</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-welcome">✗</div>
+                    <div class="stat-label">Welcome</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-birthday">✗</div>
+                    <div class="stat-label">Birthday</div>
+                </div>
+            </div>
+
+            <!-- Welcome Channel Tab -->
+            <div id="tab-welcome" class="tab-content active">
+                <section class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">General Configuration</h2>
+                        <div class="switch-container">
+                            <span class="stat-label" style="font-size:0.7rem">Enable Module</span>
+                            <label class="switch">
+                                <input type="checkbox" id="welcome-enabled">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="welcome-channel">Welcome Channel</label>
+                        <select id="welcome-channel">
+                            <option value="">Loading channels...</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="welcome-bg">Background Image URL</label>
+                        <input type="text" id="welcome-bg" placeholder="https://example.com/image.png">
+                    </div>
+                    
+                    <div class="form-group" style="padding: 16px; background: rgba(0,0,0,0.1); border-radius: 8px;">
+                        <label for="welcome-bg-upload">Or Upload Local Image</label>
+                        <input type="file" id="welcome-bg-upload" accept="image/*">
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end; margin-top: 24px;">
+                        <button onclick="saveWelcomeSettings()" class="btn primary">
+                            <i data-lucide="save" style="width:16px;height:16px;"></i>
+                            Save Changes
+                        </button>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Auto Translate Tab -->
+            <div id="tab-translate" class="tab-content">
+                <section class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">Translation Configs</h2>
+                        <button onclick="openTranslateModal()" class="btn primary">
+                            <i data-lucide="plus" style="width:16px;height:16px;"></i>
+                            Add New Config
+                        </button>
+                    </div>
+
+                    <div id="translate-configs-list">
+                        <!-- Items populated by JS -->
+                    </div>
+                </section>
+            </div>
+
+            <!-- Birthday Settings Tab -->
+            <div id="tab-birthday" class="tab-content">
+                <section class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">Birthday Wishes</h2>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="birthday-channel">Wishes Announcement Channel</label>
+                        <select id="birthday-channel" class="guild-channels">
+                            <option value="">Select a channel</option>
+                        </select>
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end;">
+                        <button onclick="saveBirthdaySettings()" class="btn primary">
+                            <i data-lucide="save" style="width:16px;height:16px;"></i>
+                            Save Settings
+                        </button>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Gift Codes Tab -->
+            <div id="tab-giftcodes" class="tab-content">
+                <!-- Gift Code Stats -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="gift-total">0</div>
+                        <div class="stat-label">Total Attempts</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="gift-success" style="color: #23a559;">0</div>
+                        <div class="stat-label">Successful</div>
+                    </div>
+                    <div class="stat-card" style="border-bottom: 2px solid #da373c;">
+                        <div class="stat-value" id="gift-failed" style="color: #f23f42;">0</div>
+                        <div class="stat-label">Failed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="gift-unique">0</div>
+                        <div class="stat-label">Unique Codes</div>
+                    </div>
+                </div>
+
+                <section class="card">
+                    <h2 class="card-title" style="margin-bottom:20px;">Active Gift Codes</h2>
+                    <div id="giftcodes-list"></div>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="translate-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">New Translation Config</h3>
+                <button onclick="closeTranslateModal()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="config-id">
+                
+                <div class="form-group">
+                    <label for="config-name">Configuration Name</label>
+                    <input type="text" id="config-name" placeholder="e.g. Alliance Chat (EN -> FR)">
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div class="form-group">
+                        <label for="source-lang">Source Language</label>
+                        <select id="source-lang">
+                            <option value="auto">Auto-Detect</option>
+                            <option value="en">English</option>
+                            <option value="es">Spanish</option>
+                            <option value="fr">French</option>
+                            <option value="de">German</option>
+                            <option value="ja">Japanese</option>
+                            <option value="zh">Chinese</option>
+                            <option value="ru">Russian</option>
+                            <option value="ko">Korean</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="target-lang">Target Language</label>
+                        <select id="target-lang">
+                            <option value="en">English</option>
+                            <option value="fr">French</option>
+                            <option value="de">German</option>
+                            <option value="es">Spanish</option>
+                            <option value="ja">Japanese</option>
+                            <option value="zh">Chinese</option>
+                            <option value="ru">Russian</option>
+                            <option value="ko">Korean</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div class="form-group">
+                        <label for="source-channel">Listen to Channel</label>
+                        <select id="source-channel" class="guild-channels">
+                            <option value="">Select Channel</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="target-channel">Post to Channel</label>
+                        <select id="target-channel" class="guild-channels">
+                            <option value="">Select Channel</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="translate-style">Posting Style</label>
+                    <select id="translate-style">
+                        <option value="webhook">Webhook (Clone User)</option>
+                        <option value="embed">Embed (Bot Style)</option>
+                        <option value="text">Plain Text</option>
+                    </select>
+                </div>
+
+                <div class="switch-container" style="margin-top:16px;">
+                    <label class="switch">
+                        <input type="checkbox" id="config-enabled" checked>
+                        <span class="slider"></span>
+                    </label>
+                    <label for="config-enabled">Enable this configuration</label>
+                </div>
+
+                <div class="switch-container" style="margin-top:12px;">
+                    <label class="switch">
+                        <input type="checkbox" id="delete-original">
+                        <span class="slider"></span>
+                    </label>
+                    <label for="delete-original">Delete original message (Cleaner chat)</label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button onclick="closeTranslateModal()" class="btn secondary">Cancel</button>
+                <button onclick="saveTranslateConfig()" class="btn primary">Save Configuration</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- UI Components -->
+    <div id="loading" class="loading-overlay"><div class="spinner"></div></div>
+    <div id="notification" class="notification">
+        <i data-lucide="check-circle"></i>
+        <span id="notification-text">Action completed</span>
+    </div>
+
+    <script>
+        const CONFIG = {
+            API_BASE: '',
+            LANG_NAMES: {
+                'en': 'English', 'es': 'Spanish', 'fr': 'French', 'de': 'German',
+                'ja': 'Japanese', 'zh': 'Chinese', 'ru': 'Russian', 'ko': 'Korean', 'hi': 'Hindi', 'auto': 'Auto-Detect'
+            }
+        };
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const guildId = urlParams.get('id');
+
+        if (!guildId) { window.location.href = 'dashboard.html'; }
+
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        function switchTab(tabName) {
+            // Update Navigation UI
+            document.querySelectorAll('.nav-item').forEach(t => t.classList.remove('active'));
+            const activeNav = document.querySelector(`.nav-item[onclick*="${tabName}"]`);
+            if (activeNav) activeNav.classList.add('active');
+
+            // Update Content UI
+            document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+
+            // Update Title
+            const titles = {
+                'welcome': 'Welcome Channel',
+                'translate': 'Auto Translate',
+                'birthday': 'Birthday Settings',
+                'giftcodes': 'Gift Codes'
+            };
+            document.getElementById('current-tab-title').textContent = titles[tabName];
+            
+            // Re-render icons if needed
+            lucide.createIcons();
+        }
+
+        async function fetchData(endpoint, options = {}) {
+            const token = localStorage.getItem('discord_access_token');
+            if (!token) { window.location.href = 'login.html'; return; }
+
+            try {
+                const response = await fetch(CONFIG.API_BASE + endpoint, {
+                    ...options,
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                        ...(options.headers || {})
+                    }
+                });
+
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                return await response.json();
+            } catch (e) {
+                console.error('Fetch error:', e);
+                showNotification(e.message, true);
+                throw e;
+            }
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'flex' : 'none';
+        }
+
+        function showNotification(message, isError = false) {
+            const n = document.getElementById('notification');
+            const text = document.getElementById('notification-text');
+            text.textContent = message;
+            n.className = 'notification' + (isError ? ' error' : '') + ' show';
+            setTimeout(() => n.classList.remove('show'), 3000);
+        }
+
+        async function loadGuildStats() {
+            try {
+                const stats = await fetchData(`/api/guilds/${guildId}/stats`);
+                document.getElementById('stat-translations').textContent = stats.translation_configs || 0;
+                document.getElementById('stat-redemptions').textContent = stats.total_redemptions || 0;
+                document.getElementById('stat-welcome').textContent = stats.welcome_enabled ? '✓' : '✗';
+                document.getElementById('stat-birthday').textContent = stats.birthday_enabled ? '✓' : '✗';
+                
+                // Update sidebar member count
+                document.getElementById('guild-member-sidebar').textContent = (stats.member_count || 0) + ' Members';
+            } catch (e) {}
+        }
+
+        async function loadChannels() {
+            try {
+                const channels = await fetchData(`/api/guilds/${guildId}/channels`);
+                const selects = document.querySelectorAll('#welcome-channel, .guild-channels, #birthday-channel');
+
+                selects.forEach(select => {
+                    select.innerHTML = '<option value="">Select a channel</option>';
+                    channels.forEach(ch => {
+                        const opt = document.createElement('option');
+                        opt.value = ch.id;
+                        opt.textContent = '#' + ch.name;
+                        select.appendChild(opt);
+                    });
+                });
+            } catch (e) {}
+        }
+
+        async function loadWelcomeSettings() {
+            try {
+                const settings = await fetchData(`/api/settings/welcome/${guildId}`);
+                document.getElementById('welcome-enabled').checked = settings.enabled;
+                document.getElementById('welcome-channel').value = settings.channel_id || '';
+                document.getElementById('welcome-bg').value = settings.bg_image_url || '';
+            } catch (e) { }
+        }
+
+        async function saveWelcomeSettings() {
+            showLoading(true);
+            try {
+                let bgImageUrl = document.getElementById('welcome-bg').value;
+                const fileInput = document.getElementById('welcome-bg-upload');
+                
+                if (fileInput.files.length > 0) {
+                    const formData = new FormData();
+                    formData.append('file', fileInput.files[0]);
+                    
+                    const uploadRes = await fetch(`/api/settings/upload`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${localStorage.getItem('discord_access_token')}`
+                        },
+                        body: formData
+                    });
+                    
+                    if (uploadRes.ok) {
+                        const uploadData = await uploadRes.json();
+                        if (uploadData.url) {
+                            bgImageUrl = uploadData.url;
+                            document.getElementById('welcome-bg').value = bgImageUrl;
+                        }
+                    }
+                }
+
+                await fetchData(`/api/settings/welcome/${guildId}`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        enabled: document.getElementById('welcome-enabled').checked,
+                        channel_id: document.getElementById('welcome-channel').value,
+                        bg_image_url: bgImageUrl
+                    })
+                });
+                showNotification('Welcome settings saved!');
+                loadGuildStats();
+            } catch (e) {
+                showNotification('Failed to save settings', true);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function loadBirthdaySettings() {
+            try {
+                const settings = await fetchData(`/api/settings/birthday/${guildId}`);
+                document.getElementById('birthday-channel').value = settings.channel_id || '';
+            } catch (e) { }
+        }
+
+        async function saveBirthdaySettings() {
+            showLoading(true);
+            try {
+                await fetchData(`/api/settings/birthday/${guildId}`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        channel_id: document.getElementById('birthday-channel').value
+                    })
+                });
+                showNotification('Birthday settings saved!');
+                loadGuildStats();
+            } catch (e) {
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function loadGiftCodeStats() {
+            try {
+                const stats = await fetchData(`/api/giftcodes/${guildId}/stats`);
+                document.getElementById('gift-total').textContent = stats.total_attempts || 0;
+                document.getElementById('gift-success').textContent = stats.successful || 0;
+                document.getElementById('gift-failed').textContent = stats.failed || 0;
+                document.getElementById('gift-unique').textContent = stats.unique_codes || 0;
+            } catch (e) {}
+        }
+
+        async function loadGiftCodes() {
+            try {
+                const data = await fetchData(`/api/giftcodes`);
+                const codes = data.codes || data || [];
+                const list = document.getElementById('giftcodes-list');
+                list.innerHTML = '';
+
+                if (codes.length === 0) {
+                    list.innerHTML = '<div class="empty-state">No gift codes found</div>';
+                    return;
+                }
+
+                codes.forEach(code => {
+                    const div = document.createElement('div');
+                    div.className = 'gift-code-item';
+                    div.innerHTML = `
+                        <div class="gift-info">
+                            <h4>${code.code}</h4>
+                            <p>Status: ${code.validation_status || 'Unknown'}</p>
+                        </div>
+                    `;
+                    list.appendChild(div);
+                });
+            } catch (e) {}
+        }
+
+        async function loadTranslateConfigs() {
+            try {
+                const configs = await fetchData(`/api/settings/translate/${guildId}`);
+                const list = document.getElementById('translate-configs-list');
+                list.innerHTML = '';
+
+                if (configs.length === 0) {
+                    list.innerHTML = '<div class="empty-state">No configurations created yet</div>';
+                    return;
+                }
+
+                configs.forEach(cfg => {
+                    const div = document.createElement('div');
+                    div.className = 'config-item';
+                    div.innerHTML = `
+                        <div class="config-info">
+                            <h4>${cfg.name}</h4>
+                            <p>${CONFIG.LANG_NAMES[cfg.source_language || 'auto']} → ${CONFIG.LANG_NAMES[cfg.target_language]}</p>
+                            <p style="font-size:0.8em; opacity:0.7;">Style: ${cfg.style} | Status: ${cfg.enabled ? 'Enabled' : 'Disabled'}</p>
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <button onclick="editTranslateConfig('${cfg.config_id}')" class="btn secondary">
+                                <i data-lucide="edit-3" style="width:14px;height:14px;"></i>
+                            </button>
+                            <button onclick="deleteTranslateConfig('${cfg.config_id}')" class="btn danger">
+                                <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
+                            </button>
+                        </div>
+                    `;
+                    list.appendChild(div);
+                });
+                lucide.createIcons();
+            } catch (e) {}
+        }
+
+        function openTranslateModal(config = null) {
+            const modal = document.getElementById('translate-modal');
+            const title = document.getElementById('modal-title');
+
+            if (config) {
+                title.textContent = 'Edit Auto-Translate Config';
+                document.getElementById('config-id').value = config.config_id;
+                document.getElementById('config-name').value = config.name;
+                document.getElementById('source-lang').value = config.source_language || 'auto';
+                document.getElementById('target-lang').value = config.target_language;
+                document.getElementById('source-channel').value = config.source_channel_id;
+                document.getElementById('target-channel').value = config.target_channel_id;
+                document.getElementById('translate-style').value = config.style || 'webhook';
+                document.getElementById('delete-original').checked = config.delete_original || false;
+                document.getElementById('config-enabled').checked = config.enabled !== false;
+            } else {
+                title.textContent = 'New Auto-Translate Config';
+                document.getElementById('config-id').value = '';
+                document.getElementById('config-name').value = '';
+                document.getElementById('delete-original').checked = false;
+                document.getElementById('config-enabled').checked = true;
+            }
+
+            modal.style.display = 'flex';
+            lucide.createIcons();
+        }
+
+        function closeTranslateModal() {
+            document.getElementById('translate-modal').style.display = 'none';
+        }
+
+        async function saveTranslateConfig() {
+            const data = {
+                config_id: document.getElementById('config-id').value,
+                name: document.getElementById('config-name').value,
+                source_language: document.getElementById('source-lang').value,
+                target_language: document.getElementById('target-lang').value,
+                source_channel_id: document.getElementById('source-channel').value,
+                target_channel_id: document.getElementById('target-channel').value,
+                style: document.getElementById('translate-style').value,
+                delete_original: document.getElementById('delete-original').checked,
+                enabled: document.getElementById('config-enabled').checked
+            };
+
+            if (!data.name || !data.source_channel_id || !data.target_channel_id) {
+                showNotification('Please fill in all required fields', true);
+                return;
+            }
+
+            showLoading(true);
+            try {
+                await fetchData(`/api/settings/translate/${guildId}`, {
+                    method: 'POST',
+                    body: JSON.stringify(data)
+                });
+                showNotification('Configuration saved!');
+                closeTranslateModal();
+                loadTranslateConfigs();
+                loadGuildStats();
+            } catch (e) {
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function editTranslateConfig(id) {
+            showLoading(true);
+            try {
+                const configs = await fetchData(`/api/settings/translate/${guildId}`);
+                const config = configs.find(c => c.config_id === id);
+                if (config) {
+                    openTranslateModal(config);
+                }
+            } catch (e) {
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function deleteTranslateConfig(id) {
+            if (!confirm('Are you sure you want to delete this configuration?')) return;
+
+            showLoading(true);
+            try {
+                await fetchData(`/api/settings/translate/${guildId}/${id}`, {
+                    method: 'DELETE'
+                });
+                showNotification('Configuration deleted');
+                loadTranslateConfigs();
+                loadGuildStats();
+            } catch (e) {
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // Initialize
+        (async () => {
+            showLoading(true);
+            try {
+                // Load guild info
+                const guildsResponse = await fetchData('/api/servers');
+                const guilds = guildsResponse.servers || [];
+                const guild = guilds.find(g => g.id === guildId);
+                
+                if (guild) {
+                    document.getElementById('guild-name-sidebar').textContent = guild.name;
+                    document.getElementById('guild-icon-sidebar').src = guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png';
+                    document.title = `Manage ${guild.name} - Whiteout Survival Bot`;
+                }
+
+                await loadChannels();
+                await loadGuildStats();
+                await loadWelcomeSettings();
+                await loadBirthdaySettings();
+                await loadTranslateConfigs();
+                await loadGiftCodeStats();
+                await loadGiftCodes();
+            } catch (e) {
+            } finally {
+                showLoading(false);
+            }
+        })();
+    </script>
+</body>
+
+</html>
