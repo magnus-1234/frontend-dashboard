@@ -98,27 +98,13 @@ async def start_web_server(bot=None, port: int = 8080):
     """Starts the FastAPI server on the existing asyncio loop."""
     app.state.bot = bot
     
-    # Log all registered routes for debugging
-    logger.info("📋 Registered Routes:")
-    for route in app.routes:
-        if hasattr(route, 'path'):
-            logger.info(f"  {route.methods} {route.path}")
-
     config = uvicorn.Config(
         app=app,
         host="0.0.0.0",
         port=port,
         loop="asyncio",
-        log_config=None,  # Prevents uvicorn from using colorama which crashes under PM2
         log_level="info"
     )
     server = uvicorn.Server(config)
-    logger.info(f"🚀 FastAPI Web Server running on port {port}")
-    
-    # Log all registered routes
-    logger.info("📋 Registered Routes:")
-    for route in app.routes:
-        if hasattr(route, 'path'):
-            logger.info(f"  {route.methods} {route.path}")
-            
+    logger.info(f"🚀 FastAPI Web Server starting on port {port}")
     await server.serve()
