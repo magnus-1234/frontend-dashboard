@@ -64,10 +64,10 @@ async def get_active_giftcodes(request: Request):
                 "last_updated": datetime.now(timezone.utc).isoformat(),
             }
 
-        raw = await GiftCodesAdapter.get_all_async()
+        raw = await GiftCodesAdapter.get_all_with_status_async()
         codes = [
             code
-            for code in (_normalize_database_code(c) for c in raw)
+            for code in (_normalize_database_code_rich(c) for c in raw)
             if code["is_active"]
         ]
         return {
@@ -207,15 +207,42 @@ def _normalize_live_code(code: dict, trusted_active: bool = False) -> dict:
 
 
 def _normalize_database_code(code_tuple) -> dict:
+    """Legacy tuple-based normalizer (kept for compatibility)."""
+    status = str(code_tuple[2] or "").strip().lower()
+    # 'pending' = code added by bot but not yet validated — still usable by players
+    is_active = status in ("valid", "active", "pending")
     return {
         "code": code_tuple[0],
         "date": code_tuple[1],
         "date_added": code_tuple[1],
-        "validation_status": code_tuple[2],
+        "validation_status": status or "pending",
         "rewards": "Rewards not specified",
         "expiry": "Unknown",
-        "source": "database",
-        "is_active": str(code_tuple[2]).lower() in ("valid", "active"),
+        "source": "bot_database",
+        "is_active": is_active,
+    }
+
+
+def _normalize_database_code_rich(doc: dict) -> dict:
+    """Rich normalizer using the full document from get_all_with_status_async."""
+    status = str(doc.get("validation_status") or "").strip().lower()
+    # 'pending' = freshly scraped by bot, not yet redeemed/validated → show as active
+    is_active = status in ("valid", "active", "pending")
+    code = str(doc.get("giftcode") or "").strip()
+    date_added = doc.get("created_at") or doc.get("date") or ""
+    updated_at = doc.get("updated_at") or ""
+    return {
+        "code": code,
+        "rewards": "Rewards not specified",
+        "expiry": "Unknown",
+        "description": "",
+        "source": "bot_database",
+        "date_added": date_added,
+        "updated_at": updated_at,
+        "validation_status": status or "pending",
+        "status": status or "pending",
+        "is_active": is_active,
+        "auto_redeem_processed": doc.get("auto_redeem_processed", False),
     }
 
 @router.get("/{guild_id}/stats")
