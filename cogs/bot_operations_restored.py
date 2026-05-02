@@ -4331,10 +4331,8 @@ class BotOperations(commands.Cog):
                             try:
                                 selected_alliance_id = int(alliance_interaction.data["values"][0])
                                 
-                                # Get alliance name
-                                alliance_cursor.execute("SELECT name FROM alliance_list WHERE alliance_id = ?", (selected_alliance_id,))
-                                result = alliance_cursor.fetchone()
-                                alliance_name = result[0] if result else f"Alliance {selected_alliance_id}"
+                                # Get alliance name from the already-fetched list
+                                alliance_name = next((name for aid, name in alliances if aid == selected_alliance_id), f"Alliance {selected_alliance_id}")
 
                                 # Assign alliance to server
                                 success = ServerAllianceAdapter.set_alliance(
