@@ -55,8 +55,8 @@ class AutoRedeemMemberAdd(BaseModel):
 @router.get("/members/{guild_id}")
 async def get_auto_redeem_members(guild_id: str):
     logger.info(f"Fetching auto-redeem members for guild {guild_id}")
-    if not mongo_enabled():
-        logger.warning("MongoDB not enabled, returning empty members list")
+    if not mongo_enabled() or not AutoRedeemMembersAdapter:
+        logger.warning("MongoDB or Adapter not available, returning empty members list")
         return {"members": []}
     
     try:
@@ -69,7 +69,7 @@ async def get_auto_redeem_members(guild_id: str):
 @router.get("/settings/{guild_id}")
 async def get_automation_settings(guild_id: str):
     logger.info(f"Fetching automation settings for guild {guild_id}")
-    if not mongo_enabled():
+    if not mongo_enabled() or not all([AutoRedeemSettingsAdapter, AutoRedeemChannelsAdapter, IDChannelsAdapter, GiftcodeStateAdapter]):
         return {
             "auto_redeem_enabled": False,
             "auto_redeem_channel_id": None,
@@ -104,8 +104,8 @@ async def get_automation_settings(guild_id: str):
 @router.post("/settings/{guild_id}")
 async def update_automation_settings(guild_id: str, settings: GiftCodeAutomationSettings):
     logger.info(f"Updating automation settings for guild {guild_id}: {settings}")
-    if not mongo_enabled():
-        raise HTTPException(status_code=503, detail="MongoDB not enabled")
+    if not mongo_enabled() or not all([AutoRedeemSettingsAdapter, AutoRedeemChannelsAdapter, IDChannelsAdapter, GiftcodeStateAdapter]):
+        raise HTTPException(status_code=503, detail="MongoDB or Adapter not enabled")
     
     try:
         gid_int = int(guild_id)
@@ -133,14 +133,10 @@ async def update_automation_settings(guild_id: str, settings: GiftCodeAutomation
         logger.error(f"Error updating automation settings for guild {guild_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/test-ping")
-async def test_ping():
-    return {"status": "ok", "message": "Giftcodes router is active"}
-
 @router.post("/members/{guild_id}/add")
 async def add_auto_redeem_member(guild_id: str, member: AutoRedeemMemberAdd):
-    if not mongo_enabled():
-        raise HTTPException(status_code=503, detail="MongoDB not enabled")
+    if not mongo_enabled() or not AutoRedeemMembersAdapter:
+        raise HTTPException(status_code=503, detail="MongoDB or Adapter not enabled")
     
     try:
         member_data = {
@@ -162,8 +158,8 @@ async def add_auto_redeem_member(guild_id: str, member: AutoRedeemMemberAdd):
 
 @router.post("/members/{guild_id}/remove")
 async def remove_auto_redeem_member(guild_id: str, payload: dict = Body(...)):
-    if not mongo_enabled():
-        raise HTTPException(status_code=503, detail="MongoDB not enabled")
+    if not mongo_enabled() or not AutoRedeemMembersAdapter:
+        raise HTTPException(status_code=503, detail="MongoDB or Adapter not enabled")
     
     try:
         fid = payload.get("fid")
@@ -178,6 +174,10 @@ async def remove_auto_redeem_member(guild_id: str, payload: dict = Body(...)):
     except Exception as e:
         logger.error(f"Error removing member from guild {guild_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/test-ping")
+async def test_ping():
+    return {"status": "ok", "message": "Giftcodes router is active"}
 
 @router.get("")
 @router.get("/")
