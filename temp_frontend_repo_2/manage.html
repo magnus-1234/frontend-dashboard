@@ -3202,8 +3202,8 @@
                 await fetchData('/api/alliance-monitor/settings', {
                     method: 'POST',
                     body: JSON.stringify({
-                        guild_id: parseInt(guildId),
-                        channel_id: parseInt(channel_id),
+                        guild_id: guildId,
+                        channel_id: channel_id,
                         enabled: enabled
                     })
                 });
@@ -3227,16 +3227,6 @@
             }
         }
 
-        function formatFurnaceLevel(lv) {
-            lv = parseInt(lv);
-            if (isNaN(lv)) return '0';
-            if (lv <= 30) return lv.toString();
-            
-            const adjusted = lv - 30;
-            const tier = Math.floor((adjusted - 1) / 5) + 1;
-            const stage = ((adjusted - 1) % 5) + 1;
-            return `${tier}-${stage}`;
-        }
 
         async function loadMonitorHistory() {
             const list = document.getElementById('monitor-history-list');
@@ -3452,8 +3442,8 @@
                 await fetchData('/api/alliance-monitor/members/add', {
                     method: 'POST',
                     body: JSON.stringify({
-                        guild_id: parseInt(guildId),
-                        fid: _lastMonitorLookup.id,
+                        guild_id: guildId,
+                        fid: String(_lastMonitorLookup.id),
                         nickname: _lastMonitorLookup.nickname,
                         furnace_lv: _lastMonitorLookup.level,
                         avatar_image: _lastMonitorLookup.avatar_image
