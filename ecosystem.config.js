@@ -24,7 +24,7 @@ module.exports = {
       restart_delay: 30000,       // 30 s cool-down between restarts
       min_uptime: "60s",          // runs < 60 s count as crashes
       kill_timeout: 15000,        // 15 s graceful shutdown before SIGKILL
-      max_memory_restart: "300M", // restart gracefully if memory exceeds 300MB
+      max_memory_restart: "1G", // increased from 300M as bot uses ~325MB+ due to ML models
 
       // ── Process behaviour ───────────────────────────────────────────────
       watch: false,
