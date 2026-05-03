@@ -67,6 +67,12 @@ jobs:
           cd "$BOT_DIR"
           echo "📂 Working directory: $(pwd)"
 
+          # Ensure PM2 and other binaries are in PATH
+          export PATH=$PATH:/home/${{ secrets.ORACLE_USER }}/.local/bin:/usr/local/bin
+          # Source profile if it exists
+          [ -f ~/.profile ] && source ~/.profile
+          [ -f ~/.bashrc ] && source ~/.bashrc
+
           # Pull latest code
           echo ""
           echo "📥 Pulling latest code..."
@@ -109,15 +115,16 @@ jobs:
           echo ""
           echo "🔄 Restarting bot..."
           # Find PM2 process name (default: discordbot)
-          # Try to get the exact process name from pm2 jlist for better reliability
-          PROCESS_NAME=$(pm2 jlist | jq -r '.[] | select(.name | test("discordbot|bot")) | .name' | head -n 1)
+          # Use a simpler grep-based approach that doesn't need jq
+          PROCESS_NAME=$(pm2 list | grep -oE "discordbot|bot" | head -n 1)
           
-          if [ -z "$PROCESS_NAME" ] || [ "$PROCESS_NAME" = "null" ]; then
+          if [ -z "$PROCESS_NAME" ]; then
             PROCESS_NAME="discordbot"
           fi
           
           echo "🔄 Using process name: $PROCESS_NAME"
           # Try to restart, if fails (like if process doesn't exist), start it
+          cd "$BOT_DIR"
           pm2 restart "$PROCESS_NAME" --update-env || pm2 start app.py --name "$PROCESS_NAME"
           
           echo "✅ Bot restarted"
