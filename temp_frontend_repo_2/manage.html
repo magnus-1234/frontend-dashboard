@@ -444,7 +444,12 @@
             grid-template-columns: 1.2fr 2fr;
             gap: 24px;
         }
-        @media(max-width: 900px) { .redeem-grid { grid-template-columns: 1fr; } }
+        @media(max-width: 900px) { 
+            .redeem-grid { grid-template-columns: 1fr; } 
+            #reminder-modal .modal-body { grid-template-columns: 1fr !important; }
+            #reminder-modal .modal-content { max-width: 95% !important; margin: 10px; }
+            .reminder-preview-side { order: -1; margin-bottom: 20px; }
+        }
         
         .player-input-wrap { display: flex; gap: 10px; margin-bottom: 16px; }
         .player-info-display {
@@ -1358,112 +1363,156 @@
 
     <!-- Reminder Modal -->
     <div id="reminder-modal" class="modal">
-        <div class="modal-content">
+        <div class="modal-content" style="max-width: 900px;">
             <div class="modal-header">
                 <h3>New Reminder</h3>
                 <button onclick="closeReminderModal()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;">
                     <i data-lucide="x"></i>
                 </button>
             </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>Title Message</label>
-                    <input type="text" id="reminder-message" placeholder="e.g. Bear Trap starts now!">
-                </div>
-                <div class="form-group">
-                    <label>Description (Body)</label>
-                    <textarea id="reminder-body" placeholder="Optional detailed text" style="min-height: 60px;"></textarea>
-                </div>
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+            <div class="modal-body" style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+                <!-- Left Side: Form -->
+                <div class="reminder-form" style="max-height: 70vh; overflow-y: auto; padding-right: 12px;">
                     <div class="form-group">
-                        <label>Start Date</label>
-                        <input type="date" id="reminder-date">
+                        <label>Title Message</label>
+                        <input type="text" id="reminder-message" placeholder="e.g. Bear Trap starts now!" oninput="updateReminderPreview()">
                     </div>
                     <div class="form-group">
-                        <label>Channel</label>
-                        <select id="reminder-channel" class="guild-channels"></select>
+                        <label>Description (Body)</label>
+                        <textarea id="reminder-body" placeholder="Optional detailed text" style="min-height: 60px;" oninput="updateReminderPreview()"></textarea>
                     </div>
-                </div>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+                        <div class="form-group">
+                            <label>Start Date</label>
+                            <input type="date" id="reminder-date">
+                        </div>
+                        <div class="form-group">
+                            <label>Channel</label>
+                            <select id="reminder-channel" class="guild-channels"></select>
+                        </div>
+                    </div>
 
-                <div class="form-group">
-                    <label>Start Time (Scroll to Select)</label>
-                    <div class="time-picker-row">
-                        <div class="wheel-container" id="wheel-hour"></div>
-                        <span class="wheel-label">:</span>
-                        <div class="wheel-container" id="wheel-min"></div>
-                        <span class="wheel-label">:</span>
-                        <div class="wheel-container" id="wheel-sec"></div>
-                        <div class="wheel-container" id="wheel-ampm" style="width: 70px;">
-                            <div class="wheel-item" style="height:33px;"></div>
-                            <div class="wheel-item" data-val="AM">AM</div>
-                            <div class="wheel-item" data-val="PM">PM</div>
-                            <div class="wheel-item" style="height:33px;"></div>
+                    <div class="form-group">
+                        <label>Start Time (Scroll to Select)</label>
+                        <div class="time-picker-row">
+                            <div class="wheel-container" id="wheel-hour"></div>
+                            <span class="wheel-label">:</span>
+                            <div class="wheel-container" id="wheel-min"></div>
+                            <span class="wheel-label">:</span>
+                            <div class="wheel-container" id="wheel-sec"></div>
+                            <div class="wheel-container" id="wheel-ampm" style="width: 70px;">
+                                <div class="wheel-item" style="height:33px;"></div>
+                                <div class="wheel-item" data-val="AM">AM</div>
+                                <div class="wheel-item" data-val="PM">PM</div>
+                                <div class="wheel-item" style="height:33px;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Timezone</label>
+                        <select id="reminder-timezone" class="timezone-select">
+                            <option value="UTC">UTC (Universal Time)</option>
+                            <option value="Asia/Kolkata">IST (India Standard Time)</option>
+                            <option value="America/New_York">EST/EDT (New York)</option>
+                            <option value="America/Los_Angeles">PST/PDT (Los Angeles)</option>
+                            <option value="Europe/London">GMT/BST (London)</option>
+                            <option value="Europe/Berlin">CET/CEST (Berlin)</option>
+                            <option value="Asia/Tokyo">JST (Tokyo)</option>
+                            <option value="Australia/Sydney">AEST/AEDT (Sydney)</option>
+                        </select>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+                        <div class="form-group">
+                            <label>Repeat / Recurrence</label>
+                            <select id="reminder-recurrence" onchange="toggleCustomInterval()">
+                                <option value="none">One-time</option>
+                                <option value="daily">Daily</option>
+                                <option value="weekly">Weekly</option>
+                                <option value="custom">Every X days...</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="custom-interval-group" style="display:none;">
+                            <label>Repeat every (days)</label>
+                            <input type="number" id="reminder-interval" min="1" value="1">
+                        </div>
+                    </div>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+                        <div class="form-group">
+                            <label>Mention</label>
+                            <select id="reminder-mention" onchange="updateReminderPreview()">
+                                <option value="everyone">@everyone</option>
+                                <option value="here">@here</option>
+                                <option value="user">Myself (@user)</option>
+                                <option value="none">None</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Image URL</label>
+                            <input type="text" id="reminder-image" placeholder="https://..." oninput="updateReminderPreview()">
+                        </div>
+                    </div>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+                        <div class="form-group">
+                            <label>Thumbnail URL</label>
+                            <input type="text" id="reminder-thumbnail" placeholder="https://..." oninput="updateReminderPreview()">
+                        </div>
+                        <div class="form-group">
+                            <label>Footer Text</label>
+                            <input type="text" id="reminder-footer" placeholder="Optional footer" oninput="updateReminderPreview()">
+                        </div>
+                    </div>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+                        <div class="form-group">
+                            <label>Footer Icon URL</label>
+                            <input type="text" id="reminder-footer-icon" placeholder="https://..." oninput="updateReminderPreview()">
+                        </div>
+                        <div class="form-group">
+                            <label>Author URL</label>
+                            <input type="text" id="reminder-author-url" placeholder="https://..." oninput="updateReminderPreview()">
                         </div>
                     </div>
                 </div>
 
-                <div class="form-group">
-                    <label>Timezone</label>
-                    <select id="reminder-timezone" class="timezone-select">
-                        <option value="UTC">UTC (Universal Time)</option>
-                        <option value="Asia/Kolkata">IST (India Standard Time)</option>
-                        <option value="America/New_York">EST/EDT (New York)</option>
-                        <option value="America/Los_Angeles">PST/PDT (Los Angeles)</option>
-                        <option value="Europe/London">GMT/BST (London)</option>
-                        <option value="Europe/Berlin">CET/CEST (Berlin)</option>
-                        <option value="Asia/Tokyo">JST (Tokyo)</option>
-                        <option value="Australia/Sydney">AEST/AEDT (Sydney)</option>
-                    </select>
-                </div>
-
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
-                    <div class="form-group">
-                        <label>Repeat / Recurrence</label>
-                        <select id="reminder-recurrence" onchange="toggleCustomInterval()">
-                            <option value="none">One-time</option>
-                            <option value="daily">Daily</option>
-                            <option value="weekly">Weekly</option>
-                            <option value="custom">Every X days...</option>
-                        </select>
+                <!-- Right Side: Preview -->
+                <div class="reminder-preview-side">
+                    <div class="preview-label"><span></span> Live Reminder Preview</div>
+                    <div class="dc-chat">
+                        <div class="dc-message">
+                            <img class="dc-bot-avatar" src="/logo.gif" alt="Bot">
+                            <div class="dc-message-body">
+                                <div class="dc-message-header">
+                                    <span class="dc-bot-name">ICEAngel</span>
+                                    <span class="dc-bot-tag">APP</span>
+                                    <span class="dc-timestamp">Reminder</span>
+                                </div>
+                                <div id="reminder-preview-mention" class="dc-text" style="margin-bottom: 4px;">@everyone</div>
+                                <!-- Embed card -->
+                                <div class="dc-embed" id="reminder-preview-embed" style="border-left-color: #8b5cf6;">
+                                    <div class="dc-embed-inner">
+                                        <div style="display: flex; gap: 12px;">
+                                            <div style="flex: 1;">
+                                                <div class="dc-embed-title" id="reminder-preview-title">Bear Trap starts now!</div>
+                                                <div class="dc-embed-desc" id="reminder-preview-body">Optional detailed text</div>
+                                            </div>
+                                            <img id="reminder-preview-thumbnail" src="" style="width: 80px; height: 80px; border-radius: 4px; object-fit: cover; display: none;">
+                                        </div>
+                                        <img id="reminder-preview-image" class="dc-embed-image" src="" alt="" style="display:none; margin-top: 8px; border-radius: 4px;">
+                                        <div class="dc-embed-footer" id="reminder-preview-footer-container" style="display: none; align-items: center; gap: 8px;">
+                                            <img id="reminder-preview-footer-icon" src="" style="width: 18px; height: 18px; border-radius: 50%; display: none;">
+                                            <span id="reminder-preview-footer-text"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="form-group" id="custom-interval-group" style="display:none;">
-                        <label>Repeat every (days)</label>
-                        <input type="number" id="reminder-interval" min="1" value="1">
-                    </div>
-                </div>
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
-                    <div class="form-group">
-                        <label>Mention</label>
-                        <select id="reminder-mention">
-                            <option value="everyone">@everyone</option>
-                            <option value="here">@here</option>
-                            <option value="user">Myself (@user)</option>
-                            <option value="none">None</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Image URL</label>
-                        <input type="text" id="reminder-image" placeholder="https://...">
-                    </div>
-                </div>
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
-                    <div class="form-group">
-                        <label>Thumbnail URL</label>
-                        <input type="text" id="reminder-thumbnail" placeholder="https://...">
-                    </div>
-                    <div class="form-group">
-                        <label>Footer Text</label>
-                        <input type="text" id="reminder-footer" placeholder="Optional footer">
-                    </div>
-                </div>
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
-                    <div class="form-group">
-                        <label>Footer Icon URL</label>
-                        <input type="text" id="reminder-footer-icon" placeholder="https://...">
-                    </div>
-                    <div class="form-group">
-                        <label>Author URL</label>
-                        <input type="text" id="reminder-author-url" placeholder="https://...">
+                    
+                    <div style="margin-top:16px; padding:12px; background:rgba(139,92,246,0.06); border-radius:10px; border:1px solid rgba(139,92,246,0.15);">
+                        <p style="font-size:0.78rem; color:var(--text-muted); line-height:1.6;">
+                            This is how your reminder will appear in Discord. Use URLs for images and icons.
+                        </p>
                     </div>
                 </div>
             </div>
@@ -2744,6 +2793,7 @@
                 toggleCustomInterval();
 
                 document.getElementById('reminder-body').value = '';
+                document.getElementById('reminder-mention').value = 'everyone';
                 document.getElementById('reminder-image').value = '';
                 document.getElementById('reminder-thumbnail').value = '';
                 document.getElementById('reminder-footer').value = '';
@@ -2751,8 +2801,72 @@
                 document.getElementById('reminder-author-url').value = '';
             }
             document.getElementById('reminder-modal').style.display = 'flex';
+            updateReminderPreview();
         }
         function closeReminderModal() { document.getElementById('reminder-modal').style.display = 'none'; }
+
+        // ──────────────────────────────────────────────────
+        //  Reminders: Preview Engine
+        // ──────────────────────────────────────────────────
+        function updateReminderPreview() {
+            const message = document.getElementById('reminder-message').value || 'Bear Trap starts now!';
+            const body = document.getElementById('reminder-body').value || 'Optional detailed text';
+            const mention = document.getElementById('reminder-mention').value;
+            const image = document.getElementById('reminder-image').value;
+            const thumbnail = document.getElementById('reminder-thumbnail').value;
+            const footerText = document.getElementById('reminder-footer').value;
+            const footerIcon = document.getElementById('reminder-footer-icon').value;
+
+            // Mention
+            const mentionEl = document.getElementById('reminder-preview-mention');
+            if (mention === 'none') {
+                mentionEl.style.display = 'none';
+            } else {
+                mentionEl.style.display = 'block';
+                mentionEl.innerHTML = mention === 'user' ? `<span class="dc-mention">@${document.getElementById('user-name').textContent}</span>` : `<span class="dc-mention">@${mention}</span>`;
+            }
+
+            // Title & Body
+            document.getElementById('reminder-preview-title').textContent = message;
+            document.getElementById('reminder-preview-body').textContent = body;
+            document.getElementById('reminder-preview-body').style.display = body ? 'block' : 'none';
+
+            // Thumbnail
+            const thumbImg = document.getElementById('reminder-preview-thumbnail');
+            if (thumbnail) {
+                thumbImg.src = thumbnail;
+                thumbImg.style.display = 'block';
+            } else {
+                thumbImg.style.display = 'none';
+            }
+
+            // Image
+            const mainImg = document.getElementById('reminder-preview-image');
+            if (image) {
+                mainImg.src = image;
+                mainImg.style.display = 'block';
+            } else {
+                mainImg.style.display = 'none';
+            }
+
+            // Footer
+            const footerContainer = document.getElementById('reminder-preview-footer-container');
+            const footerTextEl = document.getElementById('reminder-preview-footer-text');
+            const footerIconEl = document.getElementById('reminder-preview-footer-icon');
+
+            if (footerText || footerIcon) {
+                footerContainer.style.display = 'flex';
+                footerTextEl.textContent = footerText || '';
+                if (footerIcon) {
+                    footerIconEl.src = footerIcon;
+                    footerIconEl.style.display = 'block';
+                } else {
+                    footerIconEl.style.display = 'none';
+                }
+            } else {
+                footerContainer.style.display = 'none';
+            }
+        }
 
         async function updateReminder(id) {
             const data = getReminderFormData();
