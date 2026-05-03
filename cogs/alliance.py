@@ -12,7 +12,7 @@ from command_animator import command_animation
 from admin_utils import is_admin, is_global_admin, grant_admin_if_discord_admin, is_bot_owner, get_level_mapping
 from .pagination_helper import ResultsPaginationView
 try:
-    from db.mongo_adapters import mongo_enabled, AdminsAdapter, AlliancesAdapter, AllianceSettingsAdapter, AllianceMembersAdapter, FurnaceHistoryAdapter, AllianceMonitoringAdapter, ServerLimitsAdapter
+    from db.mongo_adapters import mongo_enabled, AdminsAdapter, AlliancesAdapter, AllianceSettingsAdapter, AllianceMembersAdapter, FurnaceHistoryAdapter, AllianceMonitoringAdapter, ServerLimitsAdapter, AllianceEventsAdapter
 except Exception as import_error:
     # Fallback: If MongoDB adapters fail to import, use SQLite exclusively
     print(f"[WARNING] MongoDB adapters import failed: {import_error}. Using SQLite fallback.")
@@ -3573,6 +3573,22 @@ class Alliance(commands.Cog):
             
             # Post change notifications
             for change in changes_detected:
+                # Consolidated event logging for dashboard
+                if mongo_enabled():
+                    try:
+                        nickname = change.get('nickname') or change.get('new_value') if change['type'] == 'name_change' else change.get('nickname', 'Unknown')
+                        await AllianceEventsAdapter.log_event_async(
+                            event_type=change['type'],
+                            fid=str(change['fid']),
+                            nickname=nickname,
+                            alliance_id=alliance_id,
+                            old_val=change.get('old_value'),
+                            new_val=change.get('new_value'),
+                            extra={'avatar_image': change.get('avatar_image', '')}
+                        )
+                    except Exception as e:
+                        self.log_message(f"Error logging consolidated event: {e}")
+
                 # Log furnace changes to history table
                 if change['type'] == 'furnace_change':
                     try:

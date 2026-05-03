@@ -2706,6 +2706,80 @@ class FurnaceHistoryAdapter:
             logging.error(f"Error fetching furnace history (async): {e}")
             return []
 
+    @staticmethod
+    async def get_logs_async(days: int = 7, alliance_id: Optional[int] = None, limit: int = 50) -> list:
+        """Fetch raw furnace level change events"""
+        try:
+            db = await _get_db_wos_async()
+            if db is None:
+                return []
+            
+            query = {
+                "change_date": {
+                    "$gte": datetime.utcnow() - timedelta(days=days)
+                }
+            }
+            if alliance_id is not None:
+                query["alliance_id"] = int(alliance_id)
+            
+            cursor = db[FurnaceHistoryAdapter.COLLECTION].find(query).sort("change_date", -1).limit(limit)
+            docs = await cursor.to_list(length=None)
+            for doc in docs:
+                doc['id'] = str(doc.get('_id'))
+                doc.pop('_id', None)
+            return docs
+        except Exception as e:
+            logging.error(f"Error fetching furnace logs: {e}")
+            return []
+
+
+class AllianceEventsAdapter:
+    """Consolidated adapter for all alliance monitoring events (names, avatars, furnace)"""
+    COLL = 'alliance_events'
+
+    @staticmethod
+    async def log_event_async(event_type: str, fid: str, nickname: str, alliance_id: int, old_val: Any, new_val: Any, extra: Dict[str, Any] = None) -> bool:
+        try:
+            db = await _get_db_wos_async()
+            event = {
+                'type': event_type,
+                'fid': str(fid),
+                'nickname': nickname,
+                'alliance_id': int(alliance_id),
+                'old_value': old_val,
+                'new_value': new_val,
+                'timestamp': datetime.utcnow(),
+                **(extra or {})
+            }
+            await db[AllianceEventsAdapter.COLL].insert_one(event)
+            return True
+        except Exception as e:
+            logging.error(f"Error logging alliance event: {e}")
+            return False
+
+    @staticmethod
+    async def get_recent_events_async(guild_id: int, limit: int = 50) -> list:
+        try:
+            db = await _get_db_wos_async()
+            # First get the alliance_id for this guild
+            monitor_coll = db['alliance_monitoring']
+            monitor = await monitor_coll.find_one({'guild_id': int(guild_id)})
+            if not monitor:
+                return []
+            
+            alliance_id = monitor['alliance_id']
+            cursor = db[AllianceEventsAdapter.COLL].find({'alliance_id': int(alliance_id)}).sort('timestamp', -1).limit(limit)
+            docs = await cursor.to_list(length=None)
+            for doc in docs:
+                doc['id'] = str(doc.get('_id'))
+                doc.pop('_id', None)
+                if isinstance(doc.get('timestamp'), datetime):
+                    doc['timestamp'] = doc['timestamp'].isoformat()
+            return docs
+        except Exception as e:
+            logging.error(f"Error fetching alliance events: {e}")
+            return []
+
 
 class AllianceMonitoringAdapter:
     COLL = 'alliance_monitoring'

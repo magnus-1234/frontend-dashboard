@@ -10,6 +10,7 @@ try:
         AllianceMembersAdapter, 
         FurnaceHistoryAdapter, 
         AlliancesAdapter,
+        AllianceEventsAdapter,
         mongo_enabled
     )
 except ImportError:
@@ -18,6 +19,7 @@ except ImportError:
     AllianceMembersAdapter = None
     FurnaceHistoryAdapter = None
     AlliancesAdapter = None
+    AllianceEventsAdapter = None
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/alliance-monitor", tags=["Alliance Monitor"])
@@ -94,33 +96,37 @@ async def save_monitor_settings(settings: MonitorSettings):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/history/{guild_id}")
-async def get_monitor_history(guild_id: int, alliance_id: Optional[int] = None, limit: int = 50):
+async def get_monitor_history(guild_id: int, limit: int = 50):
     if not mongo_enabled():
         return []
     
     try:
-        if not alliance_id:
-            monitors = await AllianceMonitoringAdapter.get_all_monitors_async()
-            monitor = next((m for m in monitors if m['guild_id'] == guild_id), None)
-            if not monitor:
-                return []
-            alliance_id = monitor['alliance_id']
+        events = await AllianceEventsAdapter.get_recent_events_async(guild_id, limit=limit)
         
-        # Fetch furnace history
-        # Note: We might need a more comprehensive history fetching that includes name changes
-        # For now, let's fetch furnace changes and mock others or fetch from member_history if we add tracking there
-        
-        furnace_history = await FurnaceHistoryAdapter.get_recent_changes_async(days=7, alliance_id=alliance_id)
-        
-        # Transform for frontend
+        # Format for frontend
         history = []
-        for h in furnace_history:
+        for e in events:
+            # Standardize type names for frontend CSS
+            e_type = e.get('type', 'event').replace('_change', '')
+            
+            val_text = ""
+            if e_type == 'furnace':
+                val_text = f"reached Lv.{e.get('new_value')}"
+            elif e_type == 'name':
+                val_text = f"changed name to {e.get('new_value')}"
+            elif e_type == 'avatar':
+                val_text = "updated their avatar"
+            elif e_type == 'state':
+                val_text = f"moved to State #{e.get('new_value')}"
+            else:
+                val_text = "updated their profile"
+
             history.append({
-                "type": "furnace",
-                "fid": h.get("_id"),
-                "nickname": h.get("nickname"),
-                "growth": h.get("total_growth"),
-                "timestamp": datetime.utcnow().isoformat() # Placeholder as aggregation loses exact timestamp
+                "type": e_type,
+                "fid": e.get("fid"),
+                "nickname": e.get("nickname"),
+                "value_text": val_text,
+                "timestamp": e.get("timestamp")
             })
             
         return history
