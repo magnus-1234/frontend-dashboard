@@ -228,12 +228,7 @@ def format_furnace_level(furnace_lv):
         tier = (adjusted_level - 1) // 5 + 1
         stage = (adjusted_level - 1) % 5 + 1
         
-        if stage == 5:
-            # Base tier level (35, 40, 45, etc.)
-            return f"FC {tier}"
-        else:
-            # Sub-tier level (31-34, 36-39, etc.)
-            return f"FC {tier}-{stage}"
+        return f"{tier}-{stage}"
     except (ValueError, TypeError):
         return str(furnace_lv) if furnace_lv else "0"
 

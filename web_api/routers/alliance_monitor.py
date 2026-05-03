@@ -3,6 +3,7 @@ from pydantic import BaseModel
 import logging
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
+from admin_utils import format_furnace_level
 
 try:
     from db.mongo_adapters import (
@@ -111,7 +112,7 @@ async def get_monitor_history(guild_id: int, limit: int = 50):
             
             val_text = ""
             if e_type == 'furnace':
-                val_text = f"reached Lv.{e.get('new_value')}"
+                val_text = f"reached {format_furnace_level(e.get('new_value'))}"
             elif e_type == 'name':
                 val_text = f"changed name to {e.get('new_value')}"
             elif e_type == 'avatar':
