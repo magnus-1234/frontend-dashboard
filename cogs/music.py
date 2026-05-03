@@ -1912,8 +1912,8 @@ class Music(commands.Cog):
                     # Connect to voice channel with retry logic
                     player = None
                     max_connect_retries = 3
-                    # Increased from 30s to 90s for stability
-                    connect_timeout = 90.0
+                    # Reduced from 90s to 20s to speed up ghost session clearing
+                    connect_timeout = 20.0
                     
                     for attempt in range(max_connect_retries):
                         try:
@@ -2818,8 +2818,8 @@ class Music(commands.Cog):
                 
                 player = None
                 max_connect_retries = 3  # More retries with shorter timeout
-                # Increased from 15s to 90s for stability
-                connect_timeout = 90.0
+                # Reduced from 90s to 20s to speed up ghost session clearing
+                connect_timeout = 20.0
                 self._log_lavalink_status("🎵 Manual connect Lavalink nodes")
                 
                 for attempt in range(max_connect_retries):
