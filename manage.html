@@ -1536,34 +1536,121 @@
         </div>
     </div>
 
-    <!-- Modals -->
+    <!-- Translate Modal -->
     <div id="translate-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="modal-title">New Translation Config</h3>
-                <button onclick="closeTranslateModal()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;">
-                    <i data-lucide="x"></i>
+        <div class="modal-content" style="max-width: 600px; border-radius: 20px; overflow: hidden; background: #1a1d24;">
+            <div class="modal-header" style="padding: 20px 24px; border-bottom: 1px solid rgba(255,255,255,0.05); background: #16191f;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div class="ar-icon-box dark" style="width: 36px; height: 36px; background: rgba(255,255,255,0.05); color: #fff;">
+                        <i data-lucide="languages" style="width: 18px;"></i>
+                    </div>
+                    <div>
+                        <h3 id="modal-title" style="margin: 0; font-size: 1.1rem;">New Translation Config</h3>
+                        <p style="margin: 2px 0 0; font-size: 0.75rem; color: var(--text-muted);">Configure automatic channel translation</p>
+                    </div>
+                </div>
+                <button onclick="closeTranslateModal()" style="background:rgba(255,255,255,0.05); border:none; color:var(--text-muted); cursor:pointer; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                    <i data-lucide="x" style="width: 16px;"></i>
                 </button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body" style="padding: 24px; max-height: 70vh; overflow-y: auto;">
                 <input type="hidden" id="config-id">
+                
                 <div class="form-group">
                     <label>Pipeline Name</label>
-                    <input type="text" id="config-name" placeholder="e.g. Chat Sync">
+                    <input type="text" id="config-name" placeholder="e.g. Chat Sync" style="padding: 12px;">
                 </div>
+
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
-                    <div class="form-group"><label>Source Lang</label><select id="source-lang"><option value="auto">Auto</option><option value="en">English</option></select></div>
-                    <div class="form-group"><label>Target Lang</label><select id="target-lang"><option value="en">English</option><option value="fr">French</option></select></div>
+                    <div class="form-group">
+                        <label>Source Lang</label>
+                        <select id="source-lang">
+                            <option value="auto">🔄 Auto-Detect</option>
+                            <option value="en">🇺🇸 English</option>
+                            <option value="es">🇪🇸 Spanish</option>
+                            <option value="fr">🇫🇷 French</option>
+                            <option value="de">🇩🇪 German</option>
+                            <option value="it">🇮🇹 Italian</option>
+                            <option value="pt">🇵🇹 Portuguese</option>
+                            <option value="ru">🇷🇺 Russian</option>
+                            <option value="ja">🇯🇵 Japanese</option>
+                            <option value="ko">🇰🇷 Korean</option>
+                            <option value="zh">🇨🇳 Chinese</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Target Lang</label>
+                        <select id="target-lang">
+                            <option value="en">🇺🇸 English</option>
+                            <option value="es">🇪🇸 Spanish</option>
+                            <option value="fr">🇫🇷 French</option>
+                            <option value="de">🇩🇪 German</option>
+                            <option value="it">🇮🇹 Italian</option>
+                            <option value="pt">🇵🇹 Portuguese</option>
+                            <option value="ru">🇷🇺 Russian</option>
+                            <option value="ja">🇯🇵 Japanese</option>
+                            <option value="ko">🇰🇷 Korean</option>
+                            <option value="zh">🇨🇳 Chinese</option>
+                        </select>
+                    </div>
                 </div>
+
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
-                    <div class="form-group"><label>Source Channel</label><select id="source-channel" class="guild-channels"></select></div>
-                    <div class="form-group"><label>Target Channel</label><select id="target-channel" class="guild-channels"></select></div>
+                    <div class="form-group">
+                        <label>Source Channel</label>
+                        <select id="source-channel" class="guild-channels"></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Target Channel</label>
+                        <select id="target-channel" class="guild-channels"></select>
+                    </div>
                 </div>
-                <div class="form-group"><label>Style</label><select id="translate-style"><option value="webhook">Webhook</option><option value="embed">Embed</option></select></div>
+
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+                    <div class="form-group">
+                        <label>Style</label>
+                        <select id="translate-style">
+                            <option value="webhook">Webhook (Preserves Author)</option>
+                            <option value="embed">Embed (Bot Message)</option>
+                            <option value="bot">Plain Text (Bot Message)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Min Text Length</label>
+                        <input type="number" id="translate-min-length" value="10" min="1">
+                    </div>
+                </div>
+
+                <div style="height: 1px; background: rgba(255,255,255,0.05); margin: 16px 0;"></div>
+                
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="translate-ignore-target" checked>
+                        <span>Ignore if detected language is same as target</span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="translate-ignore-not-input">
+                        <span>Ignore if detected language is NOT the source language</span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="translate-skip-attachments">
+                        <span>Skip messages with attachments</span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="translate-delete-original">
+                        <span>Delete original message after translation</span>
+                    </label>
+                </div>
             </div>
-            <div class="modal-footer">
-                <button onclick="closeTranslateModal()" class="btn btn-secondary">Cancel</button>
-                <button onclick="saveTranslateConfig()" class="btn btn-primary">Save Pipeline</button>
+            <div class="modal-footer" style="padding: 16px 24px; background: #16191f; border-top: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: flex-end; gap: 12px;">
+                <button onclick="closeTranslateModal()" class="btn btn-secondary" style="background: rgba(255,255,255,0.05);">Cancel</button>
+                <button onclick="saveTranslateConfig()" class="btn btn-primary" style="padding: 8px 24px;">Save Pipeline</button>
             </div>
         </div>
     </div>
@@ -3055,6 +3142,13 @@
                 document.getElementById('source-channel').value = config.source_channel_id || '';
                 document.getElementById('target-channel').value = config.target_channel_id || '';
                 document.getElementById('translate-style').value = config.style || 'webhook';
+                
+                // Extra fields from bot
+                document.getElementById('translate-min-length').value = config.min_text_length || 10;
+                document.getElementById('translate-ignore-target').checked = config.ignore_if_source_is_target !== false;
+                document.getElementById('translate-ignore-not-input').checked = config.ignore_if_source_is_not_input || false;
+                document.getElementById('translate-skip-attachments').checked = config.skip_attachments || false;
+                document.getElementById('translate-delete-original').checked = config.delete_original || false;
             } else {
                 document.getElementById('modal-title').textContent = 'New Translation Config';
                 document.getElementById('config-id').value = '';
@@ -3064,9 +3158,18 @@
                 document.getElementById('source-channel').value = '';
                 document.getElementById('target-channel').value = '';
                 document.getElementById('translate-style').value = 'webhook';
+                
+                // Defaults
+                document.getElementById('translate-min-length').value = 10;
+                document.getElementById('translate-ignore-target').checked = true;
+                document.getElementById('translate-ignore-not-input').checked = false;
+                document.getElementById('translate-skip-attachments').checked = false;
+                document.getElementById('translate-delete-original').checked = false;
             }
             document.getElementById('translate-modal').style.display = 'flex';
         }
+
+        function closeTranslateModal() { document.getElementById('translate-modal').style.display = 'none'; }
 
         async function editTranslateConfig(id) {
             showLoading(true);
@@ -3083,27 +3186,41 @@
             }
         }
 
-        function closeTranslateModal() { document.getElementById('translate-modal').style.display = 'none'; }
-
         async function saveTranslateConfig() {
+            const config_id = document.getElementById('config-id').value;
             const data = {
-                config_id: document.getElementById('config-id').value,
                 name: document.getElementById('config-name').value,
                 source_language: document.getElementById('source-lang').value,
                 target_language: document.getElementById('target-lang').value,
                 source_channel_id: document.getElementById('source-channel').value,
                 target_channel_id: document.getElementById('target-channel').value,
                 style: document.getElementById('translate-style').value,
-                delete_original: false,
+                min_text_length: parseInt(document.getElementById('translate-min-length').value),
+                ignore_if_source_is_target: document.getElementById('translate-ignore-target').checked,
+                ignore_if_source_is_not_input: document.getElementById('translate-ignore-not-input').checked,
+                skip_attachments: document.getElementById('translate-skip-attachments').checked,
+                delete_original: document.getElementById('translate-delete-original').checked,
                 enabled: true
             };
+
+            if (!data.name || !data.source_channel_id || !data.target_channel_id) {
+                showNotification('Please fill all required fields', true);
+                return;
+            }
+
             showLoading(true);
             try {
-                await fetchData(`/api/settings/translate/${guildId}`, { method: 'POST', body: JSON.stringify(data) });
-                showNotification('Pipeline saved!');
+                const method = config_id ? 'PATCH' : 'POST';
+                const url = config_id ? `/api/settings/translate/${guildId}/${config_id}` : `/api/settings/translate/${guildId}`;
+                await fetchData(url, { method, body: JSON.stringify(data) });
+                showNotification(config_id ? 'Config updated!' : 'Config created!');
                 closeTranslateModal();
                 loadTranslateConfigs();
-            } catch (e) {} finally { showLoading(false); }
+            } catch (e) {
+                showNotification(e.message || 'Operation failed', true);
+            } finally {
+                showLoading(false);
+            }
         }
 
         async function deleteTranslateConfig(id) {
