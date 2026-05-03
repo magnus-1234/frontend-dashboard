@@ -759,25 +759,17 @@
         /* Vertical separators between wheels - Realistic Grooves */
         .wheel-separator {
             width: 2px;
-            height: 100%;
+            height: 100px;
             background: linear-gradient(to bottom, #000 0%, #222 50%, #000 100%);
             border-left: 1px solid rgba(255,255,255,0.05);
             border-right: 1px solid rgba(0,0,0,0.5);
             z-index: 4;
-            margin: 0;
-            position: absolute;
-            top: 0;
-            bottom: 0;
+            margin: 0 10px;
+            flex-shrink: 0;
         }
-        /* Position separators precisely */
-        .wheel-separator:nth-of-type(1) { left: 24%; }
-        .wheel-separator:nth-of-type(2) { left: 33%; }
-        .wheel-separator:nth-of-type(3) { left: 47%; }
-        .wheel-separator:nth-of-type(4) { left: 56%; }
-        .wheel-separator:nth-of-type(5) { left: 70%; }
 
         .wheel-container {
-            height: 180px;
+            height: 140px; /* Reduced height for tighter alignment */
             overflow-y: scroll;
             scroll-snap-type: y mandatory;
             scrollbar-width: none;
@@ -819,6 +811,11 @@
             transform-style: preserve-3d;
             font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
             font-weight: 700;
+        }
+
+        .wheel-item.spacer {
+            pointer-events: none;
+            height: 46px; /* Explicitly match item height */
         }
 
         .wheel-item.selected {
@@ -1591,23 +1588,20 @@
                             <span style="font-size: 0.75rem; color: var(--primary); font-weight: 500;">Scroll to select</span>
                         </label>
                         <div class="time-picker-row">
-                            <div class="wheel-separator"></div>
-                            <div class="wheel-separator"></div>
-                            <div class="wheel-separator"></div>
-                            <div class="wheel-separator"></div>
-                            <div class="wheel-separator"></div>
-                            
                             <div class="wheel-container" id="wheel-hour" onscroll="updateWheelSelection(this)"></div>
+                            <div class="wheel-separator"></div>
                             <span class="wheel-label">:</span>
+                            <div class="wheel-separator"></div>
                             <div class="wheel-container" id="wheel-min" onscroll="updateWheelSelection(this)"></div>
+                            <div class="wheel-separator"></div>
                             <span class="wheel-label">:</span>
+                            <div class="wheel-separator"></div>
                             <div class="wheel-container" id="wheel-sec" onscroll="updateWheelSelection(this)"></div>
+                            <div class="wheel-separator"></div>
                             <div class="wheel-container" id="wheel-ampm" style="width: 80px;" onscroll="updateWheelSelection(this)">
-                                <div class="wheel-item spacer"></div>
                                 <div class="wheel-item spacer"></div>
                                 <div class="wheel-item" data-val="AM">AM</div>
                                 <div class="wheel-item" data-val="PM">PM</div>
-                                <div class="wheel-item spacer"></div>
                                 <div class="wheel-item spacer"></div>
                             </div>
                         </div>
@@ -1904,8 +1898,8 @@
                     const max = id === 'wheel-hour' ? 12 : 59;
                     const start = id === 'wheel-hour' ? 1 : 0;
                     
-                    // Add double spacers for better 3D centering
-                    el.innerHTML = '<div class="wheel-item spacer"></div><div class="wheel-item spacer"></div>';
+                    // Add single spacer for perfect centering with 140px container
+                    el.innerHTML = '<div class="wheel-item spacer"></div>';
                     for(let i=start; i<=max; i++) {
                         const val = String(i).padStart(2, '0');
                         const item = document.createElement('div');
@@ -1915,7 +1909,7 @@
                         item.onclick = () => setWheelValue(el, val);
                         el.appendChild(item);
                     }
-                    el.innerHTML += '<div class="wheel-item spacer"></div><div class="wheel-item spacer"></div>';
+                    el.innerHTML += '<div class="wheel-item spacer"></div>';
                 } else {
                     // AM/PM already has spacers in HTML
                     el.querySelectorAll('.wheel-item[data-val]').forEach(item => {
@@ -1983,16 +1977,19 @@
                 const absDiff = Math.abs(diff);
                 
                 // Professional Mechanical Drum Rotation
-                const radius = containerRect.height / 2;
-                const angle = (diff / radius) * 45; // Degrees of rotation
+                // Using a slightly more controlled angle for better alignment visibility
+                const angle = (diff / (containerRect.height / 2)) * 40; 
                 
                 // Opacity fades out as it moves away from center
-                const opacity = Math.max(0, 1 - (absDiff / radius));
+                const opacity = Math.max(0.1, 1 - (absDiff / (containerRect.height / 2)));
                 
                 // Z-translate to push items back in 3D space
-                const zTranslate = -Math.abs(Math.sin(angle * Math.PI / 180) * 100);
+                const zTranslate = -Math.abs(Math.sin(angle * Math.PI / 180) * 80);
                 
-                item.style.transform = `rotateX(${angle}deg) translateZ(${zTranslate}px)`;
+                // Only scale the center item slightly
+                const scale = 1 + Math.max(0, (1 - (absDiff / 20)) * 0.2);
+
+                item.style.transform = `rotateX(${angle}deg) translateZ(${zTranslate}px) scale(${scale})`;
                 item.style.opacity = opacity;
                 
                 if (absDiff < minDiff) {
@@ -3184,13 +3181,19 @@
                 mentionEl.style.display = 'none';
             } else {
                 mentionEl.style.display = 'block';
-                mentionEl.innerHTML = mention === 'user' ? `<span class="dc-mention">@${document.getElementById('user-name').textContent}</span>` : `<span class="dc-mention">@${mention}</span>`;
+                if (mention === 'user') {
+                    const userName = document.getElementById('user-name') ? document.getElementById('user-name').textContent : 'User';
+                    mentionEl.innerHTML = `<span class="dc-mention">@${userName}</span>`;
+                } else {
+                    mentionEl.innerHTML = `<span class="dc-mention">@${mention}</span>`;
+                }
             }
 
             // Title & Body
             document.getElementById('reminder-preview-title').textContent = message;
-            document.getElementById('reminder-preview-body').textContent = body;
-            document.getElementById('reminder-preview-body').style.display = body ? 'block' : 'none';
+            const bodyEl = document.getElementById('reminder-preview-body');
+            bodyEl.textContent = body;
+            bodyEl.style.display = (body && body !== 'Optional detailed text') ? 'block' : 'none';
 
             // Thumbnail
             const thumbImg = document.getElementById('reminder-preview-thumbnail');
@@ -3286,7 +3289,12 @@
                         });
                         if (res.ok) {
                             const data = await res.json();
-                            return data.url;
+                            // Prepend origin if URL is relative so Discord can reach it
+                            let url = data.url;
+                            if (url.startsWith('/')) {
+                                url = window.location.origin + url;
+                            }
+                            return url;
                         }
                     } catch (e) {
                         console.error('Upload failed:', e);
