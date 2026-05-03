@@ -336,7 +336,6 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 from matplotlib.dates import DateFormatter
 import io
-import health_server
 import uptime_checker
 import giftcode_poster
 import aiohttp

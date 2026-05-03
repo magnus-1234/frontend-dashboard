@@ -74,18 +74,6 @@ async def health_check():
         "bot_loaded": hasattr(app.state, "bot") and app.state.bot is not None
     }
 
-@app.get("/api/status")
-@app.get("/status")
-async def get_status():
-    bot = getattr(app.state, "bot", None)
-    return {
-        "status": "online",
-        "bot_id": str(bot.user.id) if bot and bot.user else None,
-        "bot_name": bot.user.name if bot and bot.user else "Whiteout Survival Bot",
-        "bot_avatar": str(bot.user.avatar.url) if bot and bot.user and bot.user.avatar else None,
-        "guilds_count": len(bot.guilds) if bot else 0
-    }
-
 @app.get("/api/debug/env")
 @app.get("/debug/env")
 async def debug_env():

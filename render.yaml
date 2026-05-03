@@ -3,7 +3,7 @@ services:
     name: wos-discord-bot
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: python "PROJECT_MIGRATION/app.py"
+    startCommand: python app.py
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.4

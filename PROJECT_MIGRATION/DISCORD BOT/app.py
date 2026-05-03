@@ -1,3 +1,4 @@
+from typing import Optional
 import os
 import sys
 import subprocess
@@ -16,50 +17,84 @@ import time
 
 def ensure_dependencies_installed():
     """
-    Install all dependencies from requirements.txt in one shot.
-    This runs FIRST before any other imports to ensure packages are available.
+    Install dependencies from requirements.txt ONLY when requirements.txt has changed.
+    Uses an MD5 hash of requirements.txt stored in ~/.bot_deps_hash as a cache key.
+    This avoids the 5-10 minute pip install on every startup.
     """
+    import hashlib
+
+    # Allow full skip via env var (used by GitHub Actions deploy on code-only pushes)
+    if os.environ.get('SKIP_INSTALL', '').lower() == 'true':
+        print("[SETUP] Skipping dependency installation (SKIP_INSTALL=true)")
+        return True
+
     # Find requirements.txt
     req_paths = [
-        "/app/requirements.txt",                    # Docker
-        os.path.join(os.path.dirname(__file__), "requirements.txt"),  # Local
+        "/app/requirements.txt",                                        # Docker
+        os.path.join(os.path.dirname(__file__), "requirements.txt"),   # Local / Oracle VM
     ]
-    
-    req_file = None
-    for path in req_paths:
-        if os.path.exists(path):
-            req_file = path
-            break
-    
+    req_file = next((p for p in req_paths if os.path.exists(p)), None)
+
     if not req_file:
         print("[ERROR] requirements.txt not found")
         return False
-    
-    print(f"[SETUP] Installing dependencies from: {req_file}")
+
+    # Compute MD5 hash of requirements.txt
     try:
-        # Install all dependencies quietly
+        with open(req_file, "rb") as f:
+            current_hash = hashlib.md5(f.read()).hexdigest()
+    except Exception as e:
+        print(f"[WARN] Could not hash requirements.txt: {e} — will reinstall to be safe")
+        current_hash = None
+
+    # Cache file lives in home directory so it persists across PM2 restarts
+    cache_file = os.path.join(os.path.expanduser("~"), ".bot_deps_hash")
+    saved_hash = ""
+    try:
+        if os.path.exists(cache_file):
+            with open(cache_file, "r") as f:
+                saved_hash = f.read().strip()
+    except Exception:
+        pass
+
+    if current_hash and current_hash == saved_hash:
+        print("[SETUP] Requirements unchanged -- skipping pip install (using cached environment)")
+        importlib.invalidate_caches()
+        return True
+
+    print(f"[SETUP] requirements.txt changed (or first run) — installing dependencies from: {req_file}")
+    try:
         subprocess.check_call(
-            [sys.executable, "-m", "pip", "install", "--upgrade", "--quiet", 
+            [sys.executable, "-m", "pip", "install",
              "--disable-pip-version-check", "-r", req_file],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=sys.stdout,
+            stderr=sys.stderr,
             timeout=1800  # 30 minutes max
         )
         print("[SETUP] Dependencies installed successfully")
-        
-        # Refresh module cache
+
+        # Save new hash so next startup skips install
+        if current_hash:
+            try:
+                with open(cache_file, "w") as f:
+                    f.write(current_hash)
+            except Exception as e:
+                print(f"[WARN] Could not save deps hash: {e}")
+
         importlib.invalidate_caches()
         return True
-        
+
     except subprocess.TimeoutExpired:
-        print("[ERROR] Installation timed out (>30 mins)")
+        print("[ERROR] Dependency installation timed out (>30 mins)")
         return False
     except Exception as e:
-        print(f"[ERROR] Installation failed: {e}")
+        print(f"[ERROR] Dependency installation failed: {e}")
         return False
 
-# Install dependencies first
-if not ensure_dependencies_installed():
+# Install / check dependencies first
+if os.environ.get("SKIP_INSTALL", "").lower() == "true":
+    print("[SETUP] Skipping dependency check (SKIP_INSTALL=true)")
+elif not ensure_dependencies_installed():
     print("[ERROR] Failed to install dependencies")
     sys.exit(1)
 
@@ -112,7 +147,10 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from dotenv import load_dotenv
+load_dotenv()
 import os
+from urllib.parse import quote
+
 import json
 import logging
 from api_manager import make_request, manager, make_image_request
@@ -129,7 +167,8 @@ from command_animator import animator
 thinking_animation = ThinkingAnimation()
 try:
     from db.mongo_adapters import mongo_enabled, BirthdaysAdapter
-except Exception:
+except Exception as e:
+    print(f"[ERROR] Failed to import MongoDB adapters: {e}")
     mongo_enabled = lambda: False
     BirthdaysAdapter = None
 import sqlite3
@@ -140,25 +179,22 @@ import cogs.shared_views as sv
 def ensure_db_tables():
     """Initialize database backend: MongoDB if available, SQLite as fallback.
     
-    IMPORTANT: MongoDB is always preferred for persistence on Render.
-    SQLite tables are only created if MongoDB is completely unavailable.
+    IMPORTANT: SQLite tables are ALWAYS created as a safety fallback.
+    This ensures that if MongoDB operations fail, the bot can still function.
     
     For Render deployment:
     - Set MONGO_URI environment variable to enable MongoDB persistence
     - Data will be saved to MongoDB cloud (persistent across restarts)
-    - SQLite is used ONLY for local development (ephemeral)
+    - SQLite tables still exist for emergency fallback
     """
     # Check if MongoDB is configured
     mongo_uri = os.getenv('MONGO_URI')
     if mongo_uri:
         logger.info("[DB] ✅ MONGO_URI detected - Using MongoDB for ALL data persistence")
-        logger.info("[DB] All alliance data, users, and configs will be saved to MongoDB")
-        logger.info("[DB] Data will persist across bot restarts on Render")
-        return  # Skip SQLite initialization - use MongoDB exclusively
-    
-    # Only create SQLite tables if MongoDB is NOT available
-    logger.warning("[DB] ⚠️  MONGO_URI not set - Falling back to SQLite (NOT persistent on Render)")
-    logger.warning("[DB] Add MONGO_URI environment variable to enable persistent MongoDB storage")
+        logger.info("[DB] SQLite tables will be created as emergency fallback only")
+    else:
+        logger.warning("[DB] ⚠️  MONGO_URI not set - Using SQLite (NOT persistent on Render)")
+        logger.warning("[DB] Add MONGO_URI environment variable to enable persistent MongoDB storage")
     
     db_dir = os.path.join(os.path.dirname(__file__), 'db')
     try:
@@ -206,6 +242,30 @@ def ensure_db_tables():
             giftcode TEXT,
             status TEXT,
             PRIMARY KEY (fid, giftcode)
+        )''')
+        # Auto-redeem tables for gift code management
+        c.execute('''CREATE TABLE IF NOT EXISTS auto_redeem_members (
+            guild_id INTEGER,
+            fid TEXT,
+            nickname TEXT,
+            furnace_lv INTEGER DEFAULT 0,
+            avatar_image TEXT,
+            added_by INTEGER,
+            added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (guild_id, fid)
+        )''')
+        c.execute('''CREATE TABLE IF NOT EXISTS auto_redeem_channels (
+            guild_id INTEGER PRIMARY KEY,
+            channel_id INTEGER NOT NULL,
+            added_by INTEGER NOT NULL,
+            added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        c.execute('''CREATE TABLE IF NOT EXISTS auto_redeem_settings (
+            guild_id INTEGER PRIMARY KEY,
+            enabled INTEGER DEFAULT 0,
+            priority INTEGER DEFAULT 999,
+            updated_by INTEGER,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
         conn.commit()
         conn.close()
@@ -276,7 +336,6 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 from matplotlib.dates import DateFormatter
 import io
-import health_server
 import uptime_checker
 import giftcode_poster
 import aiohttp
@@ -302,6 +361,11 @@ try:
 except Exception:
     # Best-effort - if this fails, logging may still error but we avoid crashing at import
     pass
+
+# Initialize database tables (SQLite fallback)
+logger = logging.getLogger(__name__)
+ensure_db_tables()
+
 
 
 # --- Improved signal handling for graceful shutdown diagnostics -----------------
@@ -460,40 +524,63 @@ def append_feedback_log(user, user_id, feedback_text, posted_channel=False, post
 
 
 async def fetch_pollinations_image(prompt_text: str, width: int = None, height: int = None, model_name: str = None, seed: int = None) -> bytes:
-    """Module-level helper to fetch images from Pollinations public endpoint."""
-    base = "https://image.pollinations.ai/prompt/"
+    """Module-level helper to fetch images from Pollinations.ai (Latest Standard)."""
+    api_key = os.getenv('POLLINATIONS_API_KEY')
+    
+    if api_key:
+        # Use new stable gateway (requires key)
+        base = "https://gen.pollinations.ai/image/"
+        params = [f"key={api_key}"]
+        # Flux is the recommended high-quality model for the new system
+        effective_model = model_name or "flux"
+    else:
+        # Legacy fallback (flaky, model parameter often causes 500s)
+        base = "https://image.pollinations.ai/prompt/"
+        params = []
+        # Strip model on legacy to avoid 500 errors
+        effective_model = None
+
     encoded = quote(prompt_text, safe='')
     url = base + encoded
-    params = []
+    
     if width:
         params.append(f"width={int(width)}")
     if height:
         params.append(f"height={int(height)}")
-    if model_name:
-        params.append(f"model={quote(model_name, safe='')}")
+    if effective_model:
+        params.append(f"model={quote(effective_model, safe='')}")
     if seed is not None:
         params.append(f"seed={int(seed)}")
+        
     if params:
         url = url + "?" + "&".join(params)
 
     timeout = aiohttp.ClientTimeout(total=120)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
+    # Use realistic browser headers to prevent 429 Rate Limiting
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "image/jpeg, image/png, image/*"
+    }
+    
+    async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
         async with session.get(url, allow_redirects=True) as resp:
             if resp.status == 200:
-                content_type = resp.headers.get("Content-Type", "") or resp.headers.get("content-type", "")
-                if content_type and content_type.startswith("image/"):
+                content_type = resp.headers.get("Content-Type", "").lower()
+                if "image/" in content_type:
                     return await resp.read()
+                # If it's not an image but 200, it might be a JSON error wrapped in 200 (rare)
                 data = await resp.read()
-                if data:
-                    return data
-                raise Exception(f"Empty response from Pollinations (status 200) for URL: {url}")
+                return data
+            elif resp.status == 401:
+                raise Exception("Pollinations API Key is invalid or missing for the new gateway.")
             elif resp.status == 429:
-                raise Exception("Rate limited by Pollinations API")
+                raise Exception("Rate limited by Pollinations API.")
             elif resp.status >= 500:
-                raise Exception(f"Pollinations server error: {resp.status}")
+                raise Exception(f"Pollinations server error: {resp.status}. Try removing the model parameter or using an API Key.")
             else:
                 text = await resp.text()
                 raise Exception(f"Pollinations request failed: {resp.status} - {text}")
+
 
 
 def detect_image_request(text: str):
@@ -792,7 +879,14 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 intents.presences = True
+intents.voice_states = True  # Explicitly enable for music functionality
 bot = commands.Bot(command_prefix='!', intents=intents)
+
+@bot.event
+async def on_socket_raw_receive(msg):
+    """Low-level monitor for the entire bot's gateway"""
+    if b'VOICE' in msg:
+        print(f"📡 [RAW_GATEWAY] Received voice-related packet: {msg[:200]}...")
 
 # Load cogs
 async def setup_hook():
@@ -825,15 +919,29 @@ async def setup_hook():
         "cogs.events",
         "cogs.server_age",
         "cogs.personalise_chat",
-        "cogs.music",  # Music bot functionality
-        "cogs.voice_conversation",  # Voice chat with AI
-        "cogs.tts",  # Text-to-Speech in voice channels
+        # "cogs.music",  # Music bot functionality (Disabled to save memory)
+        # "cogs.voicetest", # Diagnostic cog (Disabled)
+        "cogs.presence",  # Rotating Rich Presence
+        # "cogs.voice_conversation",  # Voice chat with AI
+        # "cogs.tts",  # Text-to-Speech in voice channels
         "cogs.auto_translate",  # Auto-translate with DeepL
         "cogs.message_extractor",  # Message extraction for global admins
         "cogs.tictactoe",  # Tic-Tac-Toe game
         "cogs.alliance_monitor",  # Alliance online status monitoring
+        "cogs.ai_chat",  # AI Chat functionality on mentions/DMs
+        # NOTE: cogs.start_menu removed from here — it was duplicated (also at top of list)
+        # "cogs.debug_mongo_cog",  # Removed — debug tools moved to /settings button
     ]
     
+    # Start FastAPI Web Server for dashboard & health checks early
+    try:
+        from web_api.server import start_web_server
+        # Run start_web_server as a background task so it doesn't block setup_hook
+        bot.loop.create_task(start_web_server(bot))
+        logger.info("🚀 Web server task created")
+    except Exception as e:
+        logger.error(f"❌ Failed to start web server: {e}")
+
     loaded_count = 0
     failed_count = 0
     
@@ -842,9 +950,15 @@ async def setup_hook():
             await bot.load_extension(cog_name)
             logger.info(f"✅ Loaded {cog_name}")
             loaded_count += 1
+        except commands.ExtensionAlreadyLoaded:
+            # Already loaded (e.g. PM2 overlap restart or duplicate list entry)
+            # Silently skip — the cog is already running
+            logger.debug(f"⏭️  Skipped {cog_name} (already loaded)")
+            loaded_count += 1  # Count it as successfully loaded
         except Exception as e:
-            logger.error(f"❌ Failed to load {cog_name}: {e}")
+            logger.error(f"❌ Failed to load {cog_name}: {e}", exc_info=True)
             failed_count += 1
+
     
     logger.info(f"📦 Cog loading complete: {loaded_count} loaded, {failed_count} failed")
     
@@ -855,33 +969,25 @@ async def setup_hook():
     except Exception as e:
         logger.error(f"❌ Failed to load user profiles: {e}")
     
-    # Initialize playlist storage
+    # Initialize playlist storage with timeout to prevent hanging
     try:
         from playlist_storage import playlist_storage
-        await playlist_storage.initialize()
+        await asyncio.wait_for(playlist_storage.initialize(), timeout=15.0)
         logger.info("✅ Playlist storage initialized")
+    except asyncio.TimeoutError:
+        logger.warning("⚠️ Playlist storage initialization timed out")
     except Exception as e:
         logger.error(f"❌ Failed to initialize playlist storage: {e}")
     
-    # Initialize music state storage
+    # Initialize music state storage with timeout
     try:
         from music_state_storage import music_state_storage
-        await music_state_storage.initialize()
+        await asyncio.wait_for(music_state_storage.initialize(), timeout=15.0)
         logger.info("✅ Music state storage initialized")
+    except asyncio.TimeoutError:
+        logger.warning("⚠️ Music state storage initialization timed out")
     except Exception as e:
         logger.error(f"❌ Failed to initialize music state storage: {e}")
-    
-    # Start health check server for Render deployment
-    try:
-        from health_server import start_health_server
-        port = await start_health_server()
-        if port:
-            logger.info(f"✅ Health server started on port {port}")
-            logger.info(f"🌐 Health endpoint: http://0.0.0.0:{port}/health")
-        else:
-            logger.warning("⚠️  Health server failed to start (port may be in use)")
-    except Exception as e:
-        logger.error(f"❌ Failed to start health server: {e}")
     
     # Start keep-alive task for Render
     async def keep_alive_task():
@@ -928,6 +1034,14 @@ async def setup_hook():
     except Exception as e:
         logger.error(f"❌ Failed to start keep-alive task: {e}")
 
+    # Start giftcode auto-poster background loop (Checks every 5 minutes)
+    try:
+        import giftcode_poster
+        asyncio.create_task(giftcode_poster.start_poster(bot, interval=300))
+        logger.info("✅ Giftcode auto-poster background task started (5m interval)")
+    except Exception as e:
+        logger.error(f"❌ Failed to start giftcode auto-poster task: {e}")
+
     # Restore persistent views from MongoDB
     async def restore_persistent_views():
         """Restore all persistent views from MongoDB on bot startup"""
@@ -972,6 +1086,13 @@ async def setup_hook():
                         from cogs.bot_operations import PersistentMemberListView
                         alliance_id = metadata.get('alliance_id', 0)
                         view = PersistentMemberListView(alliance_id=alliance_id)
+                    elif view_type == 'recordlist':
+                        from cogs.bot_operations import PersistentRecordsView
+                        view = PersistentRecordsView()
+                    elif view_type == 'recorddetail':
+                        from cogs.bot_operations import PersistentRecordDetailView
+                        record_name = metadata.get('record_name', "")
+                        view = PersistentRecordDetailView(record_name=record_name)
                     
                     if view:
                         # Register view with bot
@@ -1019,11 +1140,18 @@ async def setup_hook():
         # Register BirthdayWishView
         from cogs.birthday_system import BirthdayWishView
         bot.add_view(BirthdayWishView(birthday_user_ids=[]))
-        bot.add_view(BirthdayWishView(birthday_user_ids=[]))
         logger.info("✅ Registered BirthdayWishView")
+
+        # Register Record Views
+        from cogs.bot_operations import PersistentRecordsView, PersistentRecordDetailView
+        bot.add_view(PersistentRecordsView())
+        bot.add_view(PersistentRecordDetailView(record_name=""))
+        logger.info("✅ Registered Record Views")
         
     except Exception as e:
         logger.error(f"❌ Failed to register persistent views: {e}")
+
+    logger.info("✨ [STARTUP] setup_hook completed successfully")
 
 bot.setup_hook = setup_hook
 
@@ -1036,8 +1164,26 @@ async def on_ready():
         logger.info(f"📊 Connected to {len(bot.guilds)} guild(s)")
         
         # Sync commands automatically to fix visibility issues
-        synced = await bot.tree.sync()
-        logger.info(f"✅ Synced {len(synced)} commands globally")
+        try:
+            # First, try to sync globally
+            synced = await bot.tree.sync()
+            logger.info(f"✅ Synced {len(synced)} commands globally")
+            
+            # Also sync to each guild for faster visibility in background
+            async def sync_guilds_task():
+                for guild in bot.guilds:
+                    try:
+                        bot.tree.copy_global_to(guild=guild)
+                        await bot.tree.sync(guild=guild)
+                        logger.info(f"✅ Synced commands to guild: {guild.name}")
+                        await asyncio.sleep(2) # Avoid rate limits
+                    except Exception as guild_sync_error:
+                        logger.warning(f"⚠️ Failed to sync to guild {guild.name}: {guild_sync_error}")
+            
+            asyncio.create_task(sync_guilds_task())
+                    
+        except Exception as sync_error:
+            logger.error(f"❌ Failed to sync commands: {sync_error}")
         
     except Exception as e:
         logger.error(f"❌ Error in on_ready: {e}", exc_info=True)
@@ -1105,33 +1251,89 @@ async def check_server_lock(interaction: discord.Interaction) -> bool:
             # Check if server is locked
             settings_db = sqlite3.connect('db/settings.sqlite')
             cursor = settings_db.cursor()
-            cursor.execute("SELECT locked FROM server_locks WHERE guild_id = ?", (interaction.guild.id,))
+            cursor.execute("SELECT locked, feature_locked FROM server_locks WHERE guild_id = ?", (interaction.guild.id,))
             result = cursor.fetchone()
             settings_db.close()
             
-            # If server is locked, send locked message and block command execution
-            if result and result[0] == 1:
-                embed = discord.Embed(
-                    title="🔒 Bot Locked",
-                    description=(
-                        "**This bot is currently locked for this server.**\n\n"
-                        "The bot will not respond to any commands until it is unlocked by the Global Administrator.\n\n"
-                        "If you believe this is an error, please contact the server administrators."
-                    ),
-                    color=0xED4245
-                )
-                embed.set_footer(text="Contact your server administrator for assistance")
+            if result:
+                is_locked = result[0] == 1
+                is_feature_locked = result[1] == 1 if len(result) > 1 else False
                 
-                try:
-                    await interaction.response.send_message(embed=embed, ephemeral=True)
-                except:
+                # If server is completely locked, block all commands
+                if is_locked:
+                    embed = discord.Embed(
+                        title="🔒 Bot Locked",
+                        description=(
+                            "**This bot is currently locked for this server.**\n\n"
+                            "The bot will not respond to any commands until it is unlocked by the Global Administrator.\n\n"
+                            "If you believe this is an error, please contact the server administrators."
+                        ),
+                        color=0xED4245
+                    )
+                    embed.set_footer(text="Contact your server administrator for assistance")
+                    
+                    # Add Contact Administrator button
+                    view = discord.ui.View(timeout=None)
+                    
+                    # Get bot owner for contact link
+                    app_info = None
                     try:
-                        await interaction.followup.send(embed=embed, ephemeral=True)
-                    except:
+                        app_info = await interaction.client.application_info()
+                    except Exception:
                         pass
-                
-                # Return False to block command execution
-                return False
+                    
+                    if app_info and app_info.owner:
+                        owner_id = app_info.owner.id
+                        view.add_item(discord.ui.Button(
+                            label="Contact Administrator",
+                            emoji="📩",
+                            style=discord.ButtonStyle.link,
+                            url=f"https://discord.com/users/{owner_id}"
+                        ))
+                    else:
+                        # Fallback: generic support server link or just a non-link button
+                        view.add_item(discord.ui.Button(
+                            label="Contact Administrator",
+                            emoji="📩",
+                            style=discord.ButtonStyle.link,
+                            url="https://discord.com"
+                        ))
+                    
+                    try:
+                        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+                    except:
+                        try:
+                            await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+                        except:
+                            pass
+                    
+                    # Return False to block command execution
+                    return False
+                    
+                # If server is feature locked, block only specific commands
+                if is_feature_locked and interaction.command:
+                    blocked_commands = ["manage", "alliancemonitor"]
+                    if interaction.command.name in blocked_commands:
+                        embed = discord.Embed(
+                            title="🔏 Feature Locked",
+                            description=(
+                                "**This feature is currently locked for this server.**\n\n"
+                                "You cannot use the `/manage` or Alliance Monitor features until they are unlocked by the Global Administrator.\n\n"
+                                "If you believe this is an error, please contact the server administrators."
+                            ),
+                            color=0xE67E22
+                        )
+                        embed.set_footer(text="Contact your server administrator for assistance")
+                        try:
+                            await interaction.response.send_message(embed=embed, ephemeral=True)
+                        except:
+                            try:
+                                await interaction.followup.send(embed=embed, ephemeral=True)
+                            except:
+                                pass
+                        
+                        return False
+
         except Exception as e:
             # If there's an error checking locks, log it but allow command to proceed
             logger.error(f"Error checking server lock status: {e}")
@@ -1202,7 +1404,7 @@ async def on_message(message: discord.Message):
                 # Show typing indicator for text response
                 async with message.channel.typing():
                     # Get known user name for personalization
-                    user_name = get_known_user_name(message.author.id)
+                    user_name = get_known_user_name(message.author.id) or message.author.display_name
                     
                     # Build messages for OpenRouter
                     system_prompt = get_system_prompt(user_name)
@@ -1241,12 +1443,93 @@ async def on_message(message: discord.Message):
                     pass
             return
         
+        # ── AI response when bot is @mentioned or when someone replies to the bot ──
+        if message.guild:
+            bot_mentioned = bot.user in message.mentions
+            is_reply_to_bot = (
+                message.reference is not None
+                and message.reference.resolved is not None
+                and isinstance(message.reference.resolved, discord.Message)
+                and message.reference.resolved.author == bot.user
+            )
+
+            if bot_mentioned or is_reply_to_bot:
+                try:
+                    # Strip the bot mention from the message content so the AI
+                    # doesn't see "<@ID>" as part of the question.
+                    raw_content = message.content
+                    for mention in message.mentions:
+                        raw_content = raw_content.replace(f"<@{mention.id}>", "").replace(f"<@!{mention.id}>", "")
+                    user_question = raw_content.strip()
+
+                    if not user_question:
+                        await message.reply("Hey! 👋 You mentioned me — what can I help you with?", mention_author=True)
+                        return
+
+                    # Check for image-generation request first
+                    is_image_req, img_prompt = detect_image_request(user_question)
+                    if is_image_req and img_prompt:
+                        async with message.channel.typing():
+                            try:
+                                image_bytes = await fetch_pollinations_image(img_prompt)
+                                from io import BytesIO
+                                file = discord.File(BytesIO(image_bytes), filename="generated.png")
+                                embed = discord.Embed(
+                                    title="🎨 Generated Image",
+                                    description=f"**Prompt:** {img_prompt}",
+                                    color=0x00FF7F,
+                                )
+                                embed.set_image(url="attachment://generated.png")
+                                embed.set_footer(text="Powered by Pollinations.ai")
+                                view = PollinateButtonView()
+                                await message.reply(embed=embed, file=file, view=view, mention_author=False)
+                            except Exception as img_err:
+                                logger.error(f"Image generation error (mention/reply): {img_err}")
+                                await message.reply(f"Sorry, I couldn't generate that image. Error: {img_err}", mention_author=True)
+                        return
+
+                    # Regular AI text response
+                    async with message.channel.typing():
+                        user_id_str = str(message.author.id)
+                        user_name = get_known_user_name(message.author.id) or message.author.display_name
+
+                        # Refresh live WOS stats if user is personalized (has player_id saved)
+                        try:
+                            await angel_personality.refresh_game_stats(user_id_str)
+                        except Exception as _refresh_err:
+                            logger.warning(f"Could not refresh game stats for {user_id_str}: {_refresh_err}")
+
+                        system_prompt = get_system_prompt(user_name, user_id_str)
+                        ai_messages = [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_question},
+                        ]
+                        try:
+                            ai_response = await make_request(ai_messages, max_tokens=800, include_sheet_data=True)
+                            if not ai_response or not ai_response.strip():
+                                await message.reply("I heard you, but couldn't think of a reply right now. Try again! 🙏", mention_author=True)
+                                return
+                            # Split if too long
+                            if len(ai_response) <= 2000:
+                                await message.reply(ai_response, mention_author=False)
+                            else:
+                                chunks = [ai_response[i:i+2000] for i in range(0, len(ai_response), 2000)]
+                                await message.reply(chunks[0], mention_author=False)
+                                for chunk in chunks[1:]:
+                                    await message.channel.send(chunk)
+                        except Exception as ai_err:
+                            logger.error(f"AI error in mention/reply handler: {ai_err}")
+                            await message.reply("Oops, I hit an error processing your message. Please try again later! 😅", mention_author=True)
+                except Exception as mention_err:
+                    logger.error(f"Error in mention/reply handler: {mention_err}", exc_info=True)
+                return  # Don't fall through to keyword triggers when the bot was mentioned/replied to
+
         # Handle keyword triggers in guild channels
         if message.guild:
             content_lower = message.content.lower().strip()
             
-            # Check for dice/roll keywords
-            if any(keyword in content_lower for keyword in ['dice', 'roll']):
+            # Check for dice/roll keywords with word boundaries to avoid matching "scroll", "troll", etc.
+            if re.search(r'\b(dice|roll)\b', content_lower):
                 # Trigger the dice text command
                 try:
                     ctx = await bot.get_context(message)
@@ -1262,8 +1545,8 @@ async def on_message(message: discord.Message):
                 except Exception as e:
                     logger.error(f"Error triggering dice command: {e}")
             
-            # Check for giftcode keyword
-            elif 'giftcode' in content_lower:
+            # Check for giftcode keyword with word boundaries
+            elif re.search(r'\b(giftcode)\b', content_lower):
                 # Show gift codes when user types "giftcode"
                 try:
                     # Import here to avoid circular imports
@@ -1391,6 +1674,10 @@ def setup_logging():
         except Exception:
             pass
 
+    # Enable voice debugging
+    logging.getLogger('discord.voice').setLevel(logging.DEBUG)
+    logging.getLogger('discord.player').setLevel(logging.DEBUG)
+
     return logging.getLogger(__name__)
 
 
@@ -1412,6 +1699,22 @@ file_handler.setLevel(logging.INFO)
 file_formatter = logging.Formatter('%(asctime)s - %(message)s')
 file_handler.setFormatter(file_formatter)
 logger.addHandler(file_handler)
+
+# User-requested standard log files
+try:
+    # Standard output log (INFO and above)
+    out_log = logging.FileHandler('discordbot-out.log', mode='a', encoding='utf-8')
+    out_log.setLevel(logging.INFO)
+    out_log.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s'))
+    logging.getLogger().addHandler(out_log)
+
+    # Standard error log (WARNING and above)
+    err_log = logging.FileHandler('discordbot-error.log', mode='a', encoding='utf-8')
+    err_log.setLevel(logging.WARNING)
+    err_log.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s'))
+    logging.getLogger().addHandler(err_log)
+except Exception as log_error:
+    print(f"[WARN] Failed to setup standard log files: {log_error}")
 
 # Structured JSONL chat log for programmatic analysis (one JSON object per line)
 CHAT_LOG_JSONL = LOG_DIR / 'chat_logs.jsonl'
@@ -2110,7 +2413,7 @@ async def birthday(interaction: discord.Interaction):
         )
 
         embed = discord.Embed(title="Birthday Manager", description=embed_text, color=0xff69b4)
-        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1435569370389807144/1435875606632988672/v04HfJr.png?ex=690d8edd&is=690c3d5d&hm=83662954ad3897d2b39763d40c347e27222018839a178420a57eb643ffbc3542")
+        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1435569370389807144/1496492127494996119/image_34e5650b.png?ex=69ea1466&is=69e8c2e6&hm=d6fa1fe93d7c505e34d5c746c5e36f42d9e076c5dd7aab13a4f0683b1bb1dcde")
 
         view = BirthdayView()
         # Send the response (don't pass wait to response.send_message)
@@ -2136,77 +2439,7 @@ async def birthday(interaction: discord.Interaction):
 # a wrapper attempt to register `/settings`.
 
 
-@bot.tree.command(name="debug_list_commands", description="(Admin) List registered app commands and their scopes")
-@app_commands.default_permissions(administrator=True)
-async def debug_list_commands_wrapper(interaction: discord.Interaction):
-    """Admin helper to enumerate the bot.tree commands the bot currently has.
-
-    Use this from your dev guild to confirm whether `/settings` is registered
-    and where commands are scoped.
-    """
-    try:
-        try:
-            await interaction.response.defer(ephemeral=True)
-        except Exception:
-            pass
-
-        infos = []
-        try:
-            if hasattr(bot.tree, 'get_commands'):
-                iterable = bot.tree.get_commands()
-            else:
-                iterable = bot.tree.walk_commands()
-        except Exception:
-            try:
-                iterable = bot.tree.walk_commands()
-            except Exception:
-                iterable = []
-
-        for c in iterable:
-            try:
-                name = getattr(c, 'name', str(c))
-                desc = getattr(c, 'description', '') or ''
-                gid = getattr(c, 'guild_id', None)
-                scope = str(gid) if gid else 'global'
-                infos.append(f"/{name} — {desc} — scope: {scope}")
-            except Exception:
-                continue
-
-        if not infos:
-            await interaction.followup.send("No app commands found.", ephemeral=True)
-            return
-
-        out = "\n".join(infos)
-        for i in range(0, len(out), 1800):
-            await interaction.followup.send(out[i:i+1800], ephemeral=True)
-    except Exception as e:
-        try:
-            await interaction.followup.send(f"Failed to list commands: {e}", ephemeral=True)
-        except Exception:
-            pass
-
-
-@bot.tree.command(name="debug_cogs", description="(Admin) List loaded cogs and extensions")
-@app_commands.default_permissions(administrator=True)
-async def debug_cogs_wrapper(interaction: discord.Interaction):
-    """Admin helper to enumerate loaded cogs and extensions."""
-    try:
-        try:
-            await interaction.response.defer(ephemeral=True)
-        except Exception:
-            pass
-
-        cog_names = sorted(list(bot.cogs.keys())) if getattr(bot, 'cogs', None) else []
-        ext_names = sorted(list(bot.extensions.keys())) if getattr(bot, 'extensions', None) else []
-
-        out = f"Cogs: {', '.join(cog_names) or 'None'}\nExtensions: {', '.join(ext_names) or 'None'}"
-        for i in range(0, len(out), 1800):
-            await interaction.followup.send(out[i:i+1800], ephemeral=True)
-    except Exception as e:
-        try:
-            await interaction.followup.send(f"Failed to list cogs/extensions: {e}", ephemeral=True)
-        except Exception:
-            pass
+# Debug slash commands removed — debug tools moved to /settings > Debug button
 
 
 ## `/load_alliance` admin helper removed — the Alliance cog should be loaded
@@ -2354,198 +2587,7 @@ async def time_autocomplete(interaction: discord.Interaction, current: str):
     return choices[:25]
 
 
-@bot.tree.command(name="storage_status", description="Show which reminder storage is active and a sample count")
-async def storage_status(interaction: discord.Interaction):
-    """Reports whether the bot is using MongoDB or SQLite for reminders and a quick count."""
-    try:
-        # Get the ReminderSystem cog from the bot
-        reminder_cog = bot.get_cog('ReminderSystem')
-        if reminder_cog is None:
-            await interaction.response.send_message("Reminder system not loaded.", ephemeral=True)
-            return
-        
-        storage = getattr(reminder_cog, 'storage', None)
-        if storage is None:
-            await interaction.response.send_message("Reminder system not initialized.", ephemeral=True)
-            return
 
-        cls_name = storage.__class__.__name__
-        # We'll build a list of lines and send a single response so we can append local DB file info
-        out_lines = []
-        if cls_name == 'ReminderStorageMongo':
-            # Mongo storage exposes a client and collection attribute
-            try:
-                # Check connectivity with a quick ping
-                db_connected = False
-                ping_result = None
-                try:
-                    # This will raise if the server is unreachable
-                    ping_result = storage.client.admin.command('ping')
-                    db_connected = True
-                except Exception as e:
-                    ping_result = str(e)
-
-                try:
-                    count = storage.col.count_documents({})
-                except Exception as e:
-                    count = f"(error counting: {e})"
-
-                status = "connected" if db_connected else "not connected"
-                out_lines.append(f"Using MongoDB for reminders (DB {status}). Count: {count}. Ping: {ping_result}")
-            except Exception as e:
-                # Catch-all in case storage.client or storage.col access fails
-                out_lines.append(f"Using MongoDB for reminders but failed to check status: {e}")
-        else:
-            # Assume SQLite-backed ReminderStorage
-            try:
-                import sqlite3
-                path = getattr(storage, 'db_path', 'reminders.db')
-                # path may be a Path object
-                from pathlib import Path
-                p = Path(path)
-                if not p.exists():
-                    out_lines.append(f"Using SQLite but DB not found at {p}")
-                else:
-                    conn = sqlite3.connect(str(p))
-                    cur = conn.cursor()
-                    try:
-                        cur.execute('SELECT COUNT(*) FROM reminders')
-                        c = cur.fetchone()[0]
-                        out_lines.append(f"Using SQLite for reminders. Count: {c} at {p}")
-                    except Exception:
-                        out_lines.append(f"Using SQLite for reminders but 'reminders' table not found or read failed at {p}")
-                    finally:
-                        conn.close()
-            except Exception as e:
-                out_lines.append(f"Using SQLite but failed to read DB: {e}")
-
-        # Additionally, scan the local `db/` folder and report basic info for .sqlite* files
-        try:
-            from pathlib import Path
-            import os
-            import sqlite3
-            from datetime import datetime
-
-            db_dir = Path(__file__).parent / 'db'
-            if db_dir.exists() and db_dir.is_dir():
-                files = sorted(db_dir.glob('**/*.sqlite*'))
-                if files:
-                    out_lines.append('Local DB files:')
-                    for f in files:
-                        try:
-                            st = f.stat()
-                            size = st.st_size
-                            mtime = datetime.fromtimestamp(st.st_mtime).isoformat()
-                            line = f" - {f.name}: size={size} bytes, mtime={mtime}"
-                            # If it's a regular .sqlite file, try a very small query to check integrity / row count for reminders
-                            if f.name.endswith('.sqlite'):
-                                try:
-                                    conn = sqlite3.connect(str(f), timeout=1)
-                                    cur = conn.cursor()
-                                    # check if reminders table exists
-                                    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='reminders'")
-                                    if cur.fetchone():
-                                        try:
-                                            cur.execute('SELECT COUNT(*) FROM reminders')
-                                            rc = cur.fetchone()[0]
-                                            line += f", reminders={rc} rows"
-                                        except Exception:
-                                            line += ", reminders=? (error reading)"
-                                    conn.close()
-                                except Exception:
-                                    line += ", sqlite read failed"
-                            out_lines.append(line)
-                        except Exception as e:
-                            out_lines.append(f" - {f.name}: stat failed ({e})")
-                else:
-                    out_lines.append('No local .sqlite files found under db/')
-            else:
-                out_lines.append('db/ directory not found')
-        except Exception as e:
-            out_lines.append(f'Failed to scan local db/ folder: {e}')
-
-        # Also report whether the Mongo adapters (used for timezones, other adapters)
-        # are enabled and reachable. This provides a clear "Mongo enabled/connected" line
-        # in the storage status output.
-        try:
-            try:
-                from db.mongo_adapters import mongo_enabled
-                mongo_ok = False
-                if mongo_enabled():
-                    try:
-                        from db.mongo_client_wrapper import get_mongo_client
-                        # Try a fast connection check (short timeout)
-                        try:
-                            client = get_mongo_client(connect_timeout_ms=2000)
-                            # ping to ensure server is responsive
-                            client.admin.command('ping')
-                            mongo_ok = True
-                        except Exception as e:
-                            mongo_ok = False
-                            mongo_err = str(e)
-                    except Exception as e:
-                        mongo_ok = False
-                        mongo_err = str(e)
-                    if mongo_ok:
-                        out_lines.insert(0, 'Mongo adapters: enabled and reachable')
-                    else:
-                        out_lines.insert(0, f'Mongo adapters: enabled but not reachable ({mongo_err})')
-                else:
-                    out_lines.insert(0, 'Mongo adapters: disabled (no MONGO_URI)')
-            except Exception as e:
-                out_lines.insert(0, f'Mongo adapters: check failed ({e})')
-        except Exception:
-            # Don't allow the mongo check to break the whole command
-            pass
-
-        # Build an embed for nicer formatting and send it
-        try:
-            summary_lines = [l for l in out_lines if not l.startswith(' - ') and l != 'Local DB files:']
-            file_lines = []
-            seen_files_header = False
-            for l in out_lines:
-                if l == 'Local DB files:':
-                    seen_files_header = True
-                    continue
-                if seen_files_header or l.startswith(' - '):
-                    file_lines.append(l)
-
-            summary = '\n'.join(summary_lines) if summary_lines else 'No status available'
-            files_text = '\n'.join(file_lines) if file_lines else 'No local DB files found'
-
-            # Truncate files_text to fit embed field limits
-            max_len = 900
-            if len(files_text) > max_len:
-                files_text = files_text[:max_len] + '\n... (truncated)'
-
-            # Choose color based on whether any "not connected" appears
-            color = discord.Color.green()
-            if 'not connected' in summary.lower() or 'failed' in summary.lower() or 'error' in summary.lower():
-                color = discord.Color.red()
-
-            embed = discord.Embed(title='Storage status', color=color)
-            embed.add_field(name='Summary', value=summary, inline=False)
-            embed.add_field(name='Local DB files', value=files_text, inline=False)
-
-            try:
-                await interaction.response.send_message(embed=embed, ephemeral=True)
-            except Exception:
-                await interaction.followup.send(embed=embed, ephemeral=True)
-        except Exception as e:
-            # As a last resort, send plain text
-            try:
-                await interaction.response.send_message('\n'.join(out_lines), ephemeral=True)
-            except Exception:
-                try:
-                    await interaction.followup.send('\n'.join(out_lines), ephemeral=True)
-                except Exception as ex:
-                    logger.error('Failed to send storage_status response: %s / %s', e, ex)
-
-    except Exception as e:
-        try:
-            await interaction.response.send_message(f"Error checking storage status: {e}", ephemeral=True)
-        except Exception:
-            logger.error(f"Failed to report storage status: {e}")
 
 @bot.tree.command(name="reminder", description="Set a reminder with time and message")
 @app_commands.describe(
@@ -2829,7 +2871,7 @@ async def reminderdashboard(interaction: discord.Interaction):
 @bot.tree.command(name="giftcodesettings", description="Open interactive gift code settings dashboard for this server")
 @app_commands.default_permissions(administrator=True)
 async def giftcodesettings(interaction: discord.Interaction):
-    await interaction.response.defer()
+    await interaction.response.defer(ephemeral=True)
     await animator.show_loading(interaction)
     try:
         if not interaction.guild:
@@ -2854,7 +2896,7 @@ async def giftcodesettings(interaction: discord.Interaction):
             header.add_field(name="Configured Channel", value="Not configured", inline=False)
 
         await animator.stop_loading(interaction, delete=True)
-        await interaction.followup.send(embed=header, view=view)
+        await interaction.followup.send(embed=header, view=view, ephemeral=True)
 
     except Exception as e:
         logger.error(f"Error in giftcodesettings command: {e}")
@@ -2975,8 +3017,9 @@ async def imagine(
             params.append(f"width={int(width)}")
         if height:
             params.append(f"height={int(height)}")
-        if model_val and model_val != 'stable-diffusion':
-            params.append(f"model={quote(model_val, safe='')}")
+        # Omit model parameter due to 500 errors on Pollinations backend
+        # if model_val and model_val != 'stable-diffusion':
+        #     params.append(f"model={quote(model_val, safe='')}")
         if seed is not None:
             params.append(f"seed={int(seed)}")
         if params:
@@ -3954,6 +3997,8 @@ async def register_view(interaction: discord.Interaction, channel: discord.TextC
                     discord.SelectOption(label="Birthday Wish", value="birthdaywish", emoji="🎉", description="Birthday wish message with gift button"),
                     discord.SelectOption(label="Gift Code", value="giftcode", emoji="🎁", description="Gift code redeem view"),
                     discord.SelectOption(label="Member List", value="memberlist", emoji="👥", description="Alliance member list view"),
+                    discord.SelectOption(label="Record List", value="recordlist", emoji="📋", description="Custom project record list"),
+                    discord.SelectOption(label="Record Detail", value="recorddetail", emoji="📁", description="Detailed view of a specific record"),
                 ]
                 super().__init__(placeholder="Select view type...", options=options, min_values=1, max_values=1)
             
@@ -4028,6 +4073,30 @@ async def register_view(interaction: discord.Interaction, channel: discord.TextC
                         from cogs.bot_operations import PersistentMemberListView
                         view = PersistentMemberListView(alliance_id=alliance_id)
                         metadata['alliance_id'] = alliance_id
+                    elif view_type == 'recordlist':
+                        from cogs.bot_operations import PersistentRecordsView
+                        view = PersistentRecordsView()
+                    elif view_type == 'recorddetail':
+                        # Extract record_name from embed title
+                        if not self.message_obj.embeds:
+                            await select_interaction.response.send_message("❌ Message has no embed. Cannot determine record_name.", ephemeral=True)
+                            return
+                        
+                        record_name = ""
+                        title = self.message_obj.embeds[0].title or ""
+                        if "Record: " in title:
+                            record_name = title.split("Record: ", 1)[1].strip()
+                        
+                        if not record_name:
+                            await select_interaction.response.send_message(
+                                "❌ Could not determine record_name from message title. Expected 'Record: [Name]'.",
+                                ephemeral=True
+                            )
+                            return
+                        
+                        from cogs.bot_operations import PersistentRecordDetailView
+                        view = PersistentRecordDetailView(record_name=record_name)
+                        metadata['record_name'] = record_name
                     
                     if view:
                         # Register view with bot
@@ -4183,27 +4252,44 @@ def check_and_install_requirements():
     if not os.path.exists("requirements.txt"):
         print("No requirements.txt found")
         return False
+    
+    import importlib.metadata
+    
     with open("requirements.txt", "r") as f:
-        requirements = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+        # Filter commented out or empty lines
+        requirements = [line.strip() for line in f if line.strip() and not line.strip().startswith("#")]
 
     missing_packages = []
     for requirement in requirements:
-        package_name = requirement.split("==")[0].split(">=")[0].split("<=")[0].split("~=")[0].split("!=")[0]
+        # Get the distribution name (e.g. 'discord.py' from 'discord.py>=2.5.2')
+        # This handles common operators (==, >=, <=, ~=, !=)
+        dist_name = requirement.split("==")[0].split(">=")[0].split("<=")[0].split("~=")[0].split("!=")[0].strip()
+        
+        # Strip square brackets (extras) like [socks] in aiohttp[socks]
+        if "[" in dist_name:
+            dist_name = dist_name.split("[")[0].strip()
+            
         try:
-            __import__(package_name)
-        except Exception:
+            importlib.metadata.version(dist_name)
+        except importlib.metadata.PackageNotFoundError:
+            # Common overrides where distribution name != module name, though metadata version check
+            # should generally work with the name as it appears in requirements.txt (the distribution name).
             missing_packages.append(requirement)
 
     if missing_packages:
         print(f"Installing {len(missing_packages)} missing packages...")
         for package in missing_packages:
             try:
+                # Use --no-cache-dir to avoid stale cache issues, and timeout for safety
                 cmd = [sys.executable, "-m", "pip", "install", package, "--no-cache-dir"]
                 subprocess.check_call(cmd, timeout=1200)
-                print(f"Installed {package}")
+                print(f"✅ Installed {package}")
             except Exception as e:
-                print(f"Failed to install {package}: {e}")
-                return False
+                print(f"❌ Failed to install {package}: {e}")
+                # We optionally continue but usually it's better to fail early if core is missing
+                # return False 
+    
+    # Check for core packages one last time before declaring success
     print("All requirements satisfied")
     return True
 
@@ -4388,14 +4474,30 @@ if __name__ == "__main__":
             pass
 
 try:
+    if not TOKEN:
+        logger.critical("DISCORD_TOKEN not found in environment variables!")
+        # Sleep to avoid rapid restart loop if config is missing
+        time.sleep(60)
+        sys.exit(1)
+        
     bot.run(TOKEN)
+except discord.errors.HTTPException as e:
+    if e.status == 429:
+        logger.critical(f"🛑 RATE LIMITED (429) by Discord/Cloudflare. Sleeping for 15 minutes to cool down IP ban... Error: {e}")
+        # Sleep 15 minutes to let the ban expire
+        time.sleep(900)
+    else:
+        logger.error(f"Discord HTTP Exception: {e}", exc_info=True)
+    # Re-raise to exit
+    raise
 except BaseException as e:
     # Catch BaseException so we also capture SystemExit and KeyboardInterrupt
     logger.error(f"Bot exited with: {type(e).__name__}: {e}", exc_info=True)
     traceback.print_exc()
-    # keep the process alive briefly for inspection
-    for i in range(30):
-        logger.error(f"Bot exited — sleeping for inspection ({i+1}/30)")
+    # keep the process alive briefly for inspection (default 30s)
+    # Extended to 60s to give more time to read logs
+    for i in range(60):
+        logger.error(f"Bot exited — sleeping for inspection ({i+1}/60)")
         time.sleep(1)
     # re-raise to preserve original behavior after inspection
     raise
