@@ -1795,10 +1795,17 @@ class Music(commands.Cog):
 
     @commands.Cog.listener()
     async def on_socket_response(self, msg):
-        """Monitor gateway for voice server updates"""
-        if isinstance(msg, dict) and msg.get('t') == 'VOICE_SERVER_UPDATE':
-            print(f"📡 [VOICE_SERVER] Received voice server update for guild {msg['d'].get('guild_id')}")
-            print(f"   • Endpoint: {msg['d'].get('endpoint')}")
+        """Monitor gateway for all events to find the missing voice server update"""
+        if isinstance(msg, dict):
+            t = msg.get('t')
+            if t:
+                # Log voice-related events specifically
+                if "VOICE" in t:
+                    print(f"📡 [GATEWAY_EVENT] {t}")
+                
+            if t == 'VOICE_SERVER_UPDATE':
+                print(f"📡 [VOICE_SERVER] SUCCESS! Received voice server update for guild {msg['d'].get('guild_id')}")
+                print(f"   • Endpoint: {msg['d'].get('endpoint')}")
 
     async def refresh_lavalink_pool(self, reason: str) -> bool:
         """Reconnect Lavalink pool only if no nodes are currently connected."""
