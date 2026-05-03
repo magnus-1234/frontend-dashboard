@@ -30,7 +30,6 @@ jobs:
               -o ServerAliveInterval=30 \
               -o ConnectTimeout=30 \
               ${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }} << 'ENDSSH'
-          set -e
           echo "================================================"
           echo "🤖 WOS Bot Auto-Deploy — $(date)"
           echo "================================================"
@@ -42,8 +41,11 @@ jobs:
             "$HOME/WOS-BOT-1"
             "$HOME/app/bot/DISCORD BOT"
             "$HOME/bot/DISCORD BOT"
+            "/home/opc/app/bot"
+            "/home/opc/bot"
           )
           
+          echo "🔍 Searching for bot directory..."
           BOT_DIR=""
           for dir in "${POSSIBLE_DIRS[@]}"; do
             if [ -d "$dir/.git" ]; then
@@ -54,8 +56,14 @@ jobs:
           done
 
           if [ -z "$BOT_DIR" ]; then
-            echo "🔍 Searching with find (this may take a moment)..."
-            BOT_DIR=$(find $HOME -name ".git" -type d -prune 2>/dev/null | head -n 1 | xargs -r dirname 2>/dev/null)
+            echo "🔍 Deep searching with find..."
+            # Find all .git directories and list them
+            ALL_GIT_DIRS=$(find $HOME -name ".git" -type d -prune 2>/dev/null)
+            echo "📂 Found .git directories:"
+            echo "$ALL_GIT_DIRS"
+            
+            # Pick the most likely one (not in a backup or temp folder)
+            BOT_DIR=$(echo "$ALL_GIT_DIRS" | grep -vE "backup|temp|old" | head -n 1 | xargs -r dirname 2>/dev/null)
           fi
 
           if [ -z "$BOT_DIR" ]; then
