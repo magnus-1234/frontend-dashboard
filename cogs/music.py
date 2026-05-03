@@ -1950,11 +1950,12 @@ class Music(commands.Cog):
                     if not player:
                         print(f"  ⚠️ Could not establish connection to {channel.name}, removing stale music state from DB...")
                         try:
-                            # Use the adapter to delete the state
-                            from db.mongo_adapters import MusicStateStorage
-                            storage = MusicStateStorage()
-                            await storage.delete_music_state(guild.id)
-                            print(f"  ✅ Stale music state for guild {guild.id} deleted.")
+                            # Use the already imported music_state_storage instance
+                            if music_state_storage:
+                                await music_state_storage.delete_state(guild.id)
+                                print(f"  ✅ Stale music state for guild {guild.id} deleted.")
+                            else:
+                                print("  ⚠️ music_state_storage not available, could not delete state.")
                         except Exception as delete_err:
                             print(f"  ❌ Failed to delete stale music state: {delete_err}")
                         continue
