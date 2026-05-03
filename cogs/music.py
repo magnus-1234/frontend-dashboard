@@ -1793,6 +1793,13 @@ class Music(commands.Cog):
         self._log_lavalink_status()
         return connected_nodes
 
+    @commands.Cog.listener()
+    async def on_socket_response(self, msg):
+        """Monitor gateway for voice server updates"""
+        if isinstance(msg, dict) and msg.get('t') == 'VOICE_SERVER_UPDATE':
+            print(f"📡 [VOICE_SERVER] Received voice server update for guild {msg['d'].get('guild_id')}")
+            print(f"   • Endpoint: {msg['d'].get('endpoint')}")
+
     async def refresh_lavalink_pool(self, reason: str) -> bool:
         """Reconnect Lavalink pool only if no nodes are currently connected."""
         connected_nodes = self._connected_lavalink_nodes()
@@ -2198,6 +2205,11 @@ class Music(commands.Cog):
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
         """Handle voice state updates - auto-connect bot when user joins a channel"""
+        # Global diagnostic for the bot itself
+        if member.id == self.bot.user.id:
+            print(f"📡 [VOICE_STATE] Bot voice state updated: {before.channel} -> {after.channel}")
+            print(f"   • Session ID: {getattr(after, 'session_id', 'None')}")
+            
         # Check if this user has a pending connection
         if member.id not in self.pending_connections:
             return
@@ -2871,13 +2883,13 @@ class Music(commands.Cog):
                         if interaction.guild.voice_client:
                             if getattr(interaction.guild.voice_client, "channel", None) == target_channel:
                                 player = interaction.guild.voice_client
-                                if player.is_connected():
+                                if player.connected:
                                     print(f"✅ Already connected to {target_channel.name}")
                                     break
                                 else:
-                                    print(f"⚠️ Voice client exists but is not connected. Forcing fresh join...")
+                                    print(f"⚠️ Voice client exists but is not fully connected (Ready: {player.connected}). Forcing fresh join...")
                                     await interaction.guild.voice_client.disconnect(force=True)
-                                    await asyncio.sleep(1)
+                                    await asyncio.sleep(1.5)
                             else:
                                 try:
                                     await interaction.guild.voice_client.move_to(target_channel)
