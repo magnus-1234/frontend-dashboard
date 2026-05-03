@@ -713,7 +713,15 @@ class VoiceChannelButton(discord.ui.Button):
             
             # Connect bot to the voice channel
             try:
-                player = await self.channel.connect(cls=CustomPlayer, timeout=60.0, self_deaf=True)
+                # If there's a stuck voice client, try to clear it
+                if interaction.guild.voice_client:
+                    try:
+                        await interaction.guild.voice_client.disconnect(force=True)
+                        await asyncio.sleep(1)
+                    except:
+                        pass
+                
+                player = await self.channel.connect(cls=CustomPlayer, timeout=90.0, self_deaf=True)
                 player.text_channel = interaction.channel
                 
                 # Optimize voice quality
@@ -2068,16 +2076,41 @@ class Music(commands.Cog):
             
             # Check if bot is already connected to a voice channel in this guild
             if member.guild.voice_client is not None:
-                print(f"ℹ️ Bot already connected to voice in {member.guild.name}, skipping auto-connect")
-                # Clear pending connection since bot is already connected
-                if member.id in self.pending_connections:
-                    del self.pending_connections[member.id]
-                return
+                # If it's already in the target channel, we're good
+                if member.guild.voice_client.channel == after.channel:
+                    print(f"ℹ️ Bot already connected to {after.channel.name}, skipping auto-connect")
+                    if member.id in self.pending_connections:
+                        del self.pending_connections[member.id]
+                    return
+                else:
+                    # If it's in another channel, we might want to move it, but for auto-connect
+                    # we usually stick to one channel. Let's log it.
+                    print(f"ℹ️ Bot already connected to voice in {member.guild.voice_client.channel.name}, skipping auto-connect")
+                    if member.id in self.pending_connections:
+                        del self.pending_connections[member.id]
+                    return
             
             try:
                 # Connect bot to the voice channel with retry logic
                 voice_channel = after.channel
                 
+                # Check Lavalink node status before attempting connection
+                if not self.check_lavalink_connected():
+                    print(f"❌ Cannot auto-connect to {voice_channel.name}: No Lavalink nodes are connected!")
+                    # Try to reconnect Lavalink node if it's down
+                    try:
+                        print("🔄 Attempting to re-initialize Lavalink connection...")
+                        await self.cog_load()
+                        await asyncio.sleep(2)
+                    except Exception as node_reconnect_err:
+                        print(f"❌ Failed to re-initialize Lavalink: {node_reconnect_err}")
+                    
+                    if not self.check_lavalink_connected():
+                        # Clear pending connection
+                        if member.id in self.pending_connections:
+                            del self.pending_connections[member.id]
+                        return
+
                 # First, check permissions before attempting to connect
                 permissions = voice_channel.permissions_for(member.guild.me)
                 if not permissions.connect or not permissions.speak:
@@ -2088,8 +2121,10 @@ class Music(commands.Cog):
                     return
                 
                 player = None
-                max_connect_retries = 3  # More retries with shorter timeout
-                connect_timeout = 60.0  # Increased from 15s to 60s for stability on cloud hosting
+                max_connect_retries = 3
+                # Use varied timeouts for better reliability
+                # Attempt 1: 20s, Attempt 2: 40s, Attempt 3: 60s
+                timeouts = [20.0, 40.0, 60.0]
                 
                 # Diagnostic logging
                 print(f"📊 Voice Connection Diagnostics:")
@@ -2097,21 +2132,30 @@ class Music(commands.Cog):
                 print(f"   • Guild: {member.guild.name} (ID: {member.guild.id})")
                 print(f"   • User count in channel: {len(voice_channel.members)}")
                 print(f"   • Bot permissions: Connect={permissions.connect}, Speak={permissions.speak}")
-                print(f"   • Timeout: {connect_timeout}s, Max retries: {max_connect_retries}")
+                print(f"   • Max retries: {max_connect_retries}")
                 
                 for attempt in range(max_connect_retries):
+                    connect_timeout = timeouts[attempt]
                     try:
-                        print(f"🔄 Attempting to connect to {voice_channel.name} (attempt {attempt + 1}/{max_connect_retries})...")
+                        print(f"🔄 Attempting to connect to {voice_channel.name} (attempt {attempt + 1}/{max_connect_retries}, timeout={connect_timeout}s)...")
                         
                         # Add connection start time for timeout tracking
                         import time
                         start_time = time.time()
                         
+                        # If there's a stuck voice client, try to clear it
+                        if member.guild.voice_client:
+                            try:
+                                await member.guild.voice_client.disconnect(force=True)
+                                await asyncio.sleep(1)
+                            except:
+                                pass
+                        
                         player = await voice_channel.connect(
                             cls=CustomPlayer, 
                             timeout=connect_timeout, 
                             self_deaf=True,
-                            reconnect=True  # Enable automatic reconnection
+                            reconnect=True
                         )
                         
                         elapsed = time.time() - start_time
@@ -3173,7 +3217,15 @@ class Music(commands.Cog):
             # Check if user is in voice channel
             if interaction.user.voice and interaction.user.voice.channel:
                 try:
-                    player = await interaction.user.voice.channel.connect(cls=CustomPlayer, timeout=60.0)
+                    # If there's a stuck voice client, try to clear it
+                    if interaction.guild.voice_client:
+                        try:
+                            await interaction.guild.voice_client.disconnect(force=True)
+                            await asyncio.sleep(1)
+                        except:
+                            pass
+                    
+                    player = await interaction.user.voice.channel.connect(cls=CustomPlayer, timeout=90.0)
                     player.text_channel = interaction.channel
                 except Exception as e:
                     await interaction.response.send_message(
