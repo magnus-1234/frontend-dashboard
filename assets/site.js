@@ -102,7 +102,7 @@
       .then((status) => {
         setStat("servers", compactNumber(status.servers_count ?? status.guilds_count));
         setStat("uptime", formatUptime(status.uptime_seconds));
-        setStat("members", compactNumber(status.members_count));
+        setStat("members", compactNumber(status.total_members ?? status.members_count));
         setStat("latency", status.latency_ms == null ? "Online" : `${status.latency_ms}ms`);
       })
       .catch(() => {
