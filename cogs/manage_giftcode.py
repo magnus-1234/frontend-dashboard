@@ -2293,7 +2293,10 @@ class ManageGiftCode(commands.Cog):
                     if item.get('code') and item.get('is_active', True):
                         code_key = item['code']
                         expiry = item.get('expiry', 'Unknown')
-                        active_codes_map[code_key.upper()] = expiry
+                        # Case-insensitive deduplication, but preserve original case in map
+                        existing_keys = {k.upper(): k for k in active_codes_map.keys()}
+                        if code_key.upper() not in existing_keys:
+                            active_codes_map[code_key] = expiry
         except Exception as e:
             self.logger.error(f"Error fetching website codes for consolidated list: {e}")
             
@@ -2302,9 +2305,9 @@ class ManageGiftCode(commands.Cog):
             api_codes = await self.fetch_codes_from_api()
             if api_codes:
                 for code_str, date_str in api_codes:
-                    code_upper = code_str.upper()
-                    if code_upper not in active_codes_map:
-                        active_codes_map[code_upper] = date_str
+                    existing_keys = {k.upper(): k for k in active_codes_map.keys()}
+                    if code_str.upper() not in existing_keys:
+                        active_codes_map[code_str] = date_str
         except Exception as e:
             self.logger.error(f"Error fetching API codes for consolidated list: {e}")
         
@@ -4244,7 +4247,7 @@ class ManageGiftCode(commands.Cog):
                             mongo_codes = GiftCodesAdapter.get_all_with_status()
                             if mongo_codes:
                                 for code_data in mongo_codes:
-                                    c = str(code_data.get('giftcode', ''))
+                                    c = str(code_data.get('giftcode', '')).upper()
                                     proc = code_data.get('auto_redeem_processed', False)
                                     date_added = code_data.get('date', '')
                                     db_status_map[c] = (proc, date_added)
@@ -4255,7 +4258,7 @@ class ManageGiftCode(commands.Cog):
                         try:
                             self.cursor.execute("SELECT giftcode, auto_redeem_processed, date FROM gift_codes")
                             for row in self.cursor.fetchall():
-                                db_status_map[row[0]] = (bool(row[1]), str(row[2]))
+                                db_status_map[str(row[0]).upper()] = (bool(row[1]), str(row[2]))
                         except Exception as e:
                             self.logger.error(f"SQLite fetch failed for trigger menu: {e}")
                     
@@ -4263,8 +4266,9 @@ class ManageGiftCode(commands.Cog):
                     for code_str in valid_active_codes:
                         processed = False
                         date_str = active_codes_map[code_str]
-                        if code_str in db_status_map:
-                            processed, db_date = db_status_map[code_str]
+                        code_up = code_str.upper()
+                        if code_up in db_status_map:
+                            processed, db_date = db_status_map[code_up]
                             if db_date and db_date.strip() and date_str == 'Unknown':
                                 date_str = db_date
                         
