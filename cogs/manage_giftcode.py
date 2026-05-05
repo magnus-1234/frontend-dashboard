@@ -208,7 +208,7 @@ class ManageGiftCode(commands.Cog):
         )
         
         # Concurrent processing configuration
-        self.concurrent_redemptions = 2  # Process 2 members simultaneously
+        self.concurrent_redemptions = 5  # Process 5 members simultaneously
         
         # Auto-redeem lock to prevent duplicate processing
         self._active_redemptions = set()  # Track active (guild_id, code) pairs
@@ -2105,13 +2105,10 @@ class ManageGiftCode(commands.Cog):
                 # err_code 40007 = true code expiry (permanent failure)
                 return "TIME_ERROR", image_bytes, captcha_code, method
             elif msg == "CDK NOT FOUND":
-                # WOS API returns CDK NOT FOUND when captcha answer was wrong OR code is truly gone.
-                # Retry like a captcha error — if it persists across all attempts, then treat as failure.
-                self.logger.warning(f"CDK NOT FOUND for FID {player_id} on attempt {attempt + 1} — retrying (may be bad captcha)")
-                if attempt == max_ocr_attempts - 1:
-                    return "CDK_NOT_FOUND", image_bytes, captcha_code, method
-                await asyncio.sleep(random.uniform(1.5, 2.5))
-                continue
+                # With casing now normalized, CDK NOT FOUND is a definitive failure.
+                # Don't retry to keep the process fast.
+                self.logger.warning(f"❌ CDK NOT FOUND for FID {player_id}")
+                return "CDK_NOT_FOUND", image_bytes, captcha_code, method
             elif msg == "USAGE LIMIT" and err_code == 40009:
                 return "USAGE_LIMIT", image_bytes, captcha_code, method
             else:
