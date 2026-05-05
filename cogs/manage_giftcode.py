@@ -1752,18 +1752,16 @@ class ManageGiftCode(commands.Cog):
                 """Process a single member with semaphore control"""
                 nonlocal success_count, failed_count, already_redeemed_count, completed_count, code_is_invalid
                 
-                # Check for stop signal
+                # Check for stop signal - silently skip without counting as failed
                 if self.stop_signals.get(guild_id) or code_is_invalid:
                     async with progress_lock:
-                        failed_count += 1
                         completed_count += 1
                     return
                 
                 async with semaphore:
-                    # Double check after acquiring semaphore
+                    # Double check after acquiring semaphore - silently skip without counting as failed
                     if self.stop_signals.get(guild_id) or code_is_invalid:
                         async with progress_lock:
-                            failed_count += 1
                             completed_count += 1
                         return
                     # Process the member
@@ -1772,7 +1770,9 @@ class ManageGiftCode(commands.Cog):
                     )
                     
                     # If status is permanently invalid for everyone, abort early
-                    if status in ["INVALID_CODE", "EXPIRED", "CDK_NOT_FOUND", "TIME_ERROR", "USAGE_LIMIT"]:
+                    # NOTE: CDK_NOT_FOUND is excluded here - it can be a transient per-member error
+                    # and should NOT abort all remaining members (they may succeed)
+                    if status in ["INVALID_CODE", "EXPIRED", "TIME_ERROR", "USAGE_LIMIT"]:
                         if not code_is_invalid:
                             self.logger.warning(f"🚫 Code {code_up} is globally invalid ({status})! Aborting remaining members in guild {guild_id}")
                             code_is_invalid = True
