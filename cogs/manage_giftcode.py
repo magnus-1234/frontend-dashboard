@@ -226,7 +226,7 @@ class ManageGiftCode(commands.Cog):
             self.captcha_solver = None
         
         # Runtime throughput knobs for the existing auto-redeem path.
-        self.concurrent_redemptions = _env_int("AUTO_REDEEM_MEMBER_CONCURRENCY", 100, 1, 500)
+        self.concurrent_redemptions = _env_int("AUTO_REDEEM_MEMBER_CONCURRENCY", 2, 1, 500)
         self.guild_worker_count = _env_int("AUTO_REDEEM_GUILD_WORKERS", 1, 1, 8)
         self.guild_worker_delay = _env_float("AUTO_REDEEM_GUILD_DELAY", 0.1, 0.0, 5.0)
         self.skip_player_login_for_redeem = _env_bool("SKIP_WOS_PLAYER_LOGIN_FOR_REDEEM", True)
@@ -2091,9 +2091,9 @@ class ManageGiftCode(commands.Cog):
                 # We create the task, but wait slightly before creating the next one
                 t = asyncio.create_task(process_member_with_semaphore(idx, fid, nickname, furnace_lv))
                 tasks.append(t)
-                # Stagger the start of each task by 0.15s to avoid initial millisecond burst
-                # For 88 members, this adds ~13 seconds to total time but DRASTICALLY reduces initial 403s/429s
-                await asyncio.sleep(0.15)
+                # Stagger the start of each task by 0.5s to enforce ~2 members/second throughput
+                # For 88 members, this adds ~44s total but prevents 429 rate-limit bursts
+                await asyncio.sleep(0.5)
             
             # Process all members concurrently (wait for all to finish)
             await asyncio.gather(*tasks, return_exceptions=True)
@@ -2141,7 +2141,7 @@ class ManageGiftCode(commands.Cog):
                 for idx, (fid, nickname, furnace_lv) in enumerate(members_for_retry, 1):
                     t = asyncio.create_task(process_member_with_semaphore(idx, fid, nickname, furnace_lv, allow_second_pass=False))
                     retry_tasks.append(t)
-                    await asyncio.sleep(0.2)
+                    await asyncio.sleep(0.5)
                 
                 await asyncio.gather(*retry_tasks, return_exceptions=True)
                 updater_task.cancel()
