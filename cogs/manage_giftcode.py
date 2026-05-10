@@ -2801,6 +2801,22 @@ class ManageGiftCode(commands.Cog):
                     is_processed = db_codes_data[code_up]['processed']
                     stored_date = db_codes_data[code_up]['date']
                     
+                    # Ensure original casing is preserved in database even if already exists
+                    try:
+                        self.cursor.execute(
+                            "UPDATE gift_codes SET giftcode_original = ? WHERE giftcode = ?",
+                            (code, code_up)
+                        )
+                        if mongo_enabled() and GiftCodesAdapter:
+                            try:
+                                db = _get_db()
+                                if db is not None:
+                                    db[GiftCodesAdapter.COLL].update_one({'_id': code_up}, {'$set': {'giftcode_original': code}})
+                            except Exception as me:
+                                pass
+                    except Exception as e:
+                        pass
+
                     # Case 1: Code in DB but marked as NOT processed (e.g. from a partial run or recent detection)
                     if not is_processed:
                         # CRITICAL SAFETY: Don't re-trigger if it's already in the process of being redeemed
@@ -3078,7 +3094,8 @@ class ManageGiftCode(commands.Cog):
                         for code in all_codes:
                             if not code.get('auto_redeem_processed', False):
                                 giftcode = code['giftcode']
-                                unprocessed_codes[giftcode] = (code.get('date', ''), code.get('created_at'))
+                                giftcode_original = code.get('giftcode_original', giftcode)
+                                unprocessed_codes[giftcode] = (code.get('date', ''), code.get('created_at'), giftcode_original)
                                 count_mongo += 1
                     self.logger.info(f"✅ MongoDB: Found {count_mongo} unprocessed codes")
                 except Exception as e:

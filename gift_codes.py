@@ -450,7 +450,7 @@ class GiftCodeScraper:
         i = 0
         while i < len(lines):
             line = lines[i]
-            code_match = re.match(r'^([A-Z0-9]{4,20})\s+(.+)', line)
+            code_match = re.match(r'^([a-zA-Z0-9]{4,20})\s+(.+)', line)
             if code_match:
                 code = code_match.group(1)
                 rest_of_line = code_match.group(2)
@@ -461,7 +461,7 @@ class GiftCodeScraper:
                 expiry = "Unknown" if is_active else "Expired"
                 full_text = rest_of_line
                 for j in range(i + 1, min(i + 3, len(lines))):
-                    if lines[j] and not re.match(r'^[A-Z0-9]{4,20}\s', lines[j]):
+                    if lines[j] and not re.match(r'^[a-zA-Z0-9]{4,20}\s', lines[j]):
                         full_text += " " + lines[j]
                     else:
                         break

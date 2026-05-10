@@ -958,6 +958,7 @@ class GiftCodesAdapter:
             if doc:
                 return {
                     'giftcode': doc.get('_id'),
+                    'giftcode_original': doc.get('giftcode_original', doc.get('_id')),
                     'date': doc.get('date'),
                     'validation_status': doc.get('validation_status'),
                     'auto_redeem_processed': doc.get('auto_redeem_processed', False),
@@ -981,6 +982,7 @@ class GiftCodesAdapter:
                 if _id:
                     results.append({
                         'giftcode': str(_id),
+                        'giftcode_original': d.get('giftcode_original', str(_id)),
                         'date': d.get('date'),
                         'validation_status': d.get('validation_status'),
                         'auto_redeem_processed': d.get('auto_redeem_processed', False),
@@ -1001,6 +1003,7 @@ class GiftCodesAdapter:
             if doc:
                 return {
                     'giftcode': doc.get('_id'),
+                    'giftcode_original': doc.get('giftcode_original', doc.get('_id')),
                     'date': doc.get('date'),
                     'validation_status': doc.get('validation_status'),
                     'auto_redeem_processed': doc.get('auto_redeem_processed', False),
@@ -1025,6 +1028,7 @@ class GiftCodesAdapter:
                 if _id:
                     results.append({
                         'giftcode': str(_id),
+                        'giftcode_original': d.get('giftcode_original', str(_id)),
                         'date': d.get('date'),
                         'validation_status': d.get('validation_status'),
                         'auto_redeem_processed': d.get('auto_redeem_processed', False),
