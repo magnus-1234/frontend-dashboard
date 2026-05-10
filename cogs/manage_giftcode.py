@@ -580,17 +580,19 @@ class ManageGiftCode(commands.Cog):
             # If no FID is provided, run the full auto-redeem process for the guild
             await status_msg.edit(
                 content=(
-                    f"✅ Configuration verified. Launching full auto-redeem test for `{code}`\n"
+                    f"✅ Configuration verified. Queuing full auto-redeem test for `{code}`\n"
                     f"📊 **Watch progress in:** <#{channel_id}>\n"
-                    f"⏳ This message will update when complete..."
+                    f"⏳ Processing via the standard queue — results will appear in the auto-redeem channel."
                 )
             )
-            await self.process_auto_redeem(ctx.guild.id, code, is_recheck=True)
+            # Route through the standard queue (same path as all other triggers)
+            # is_recheck=True so it bypasses the 'already processed' guard
+            await self.trigger_auto_redeem_for_new_codes([(code, "Manual Test")], is_recheck=True)
             # Update command-channel message once done so user knows it finished
             try:
                 await status_msg.edit(
                     content=(
-                        f"✅ **Auto-redeem test complete!** Code: `{code}`\n"
+                        f"✅ **Auto-redeem test queued!** Code: `{code}`\n"
                         f"📊 Results posted in <#{channel_id}>"
                     )
                 )
@@ -3283,11 +3285,12 @@ class ManageGiftCode(commands.Cog):
             self.logger.info(f"🔧 Manual trigger of auto-redeem for code {code} by {ctx.author}")
             
             # Format as list of tuples [(code, date)]
-            # We don't have the date handy, so just pass empty string or 'Manual'
+            # We don't have the date handy, so just pass 'Manual Trigger'
             codes_list = [(code, "Manual Trigger")]
             
-            # Call the existing method
-            await self.trigger_auto_redeem_for_new_codes(codes_list)
+            # is_recheck=True so it bypasses the 'already processed' guard —
+            # this is a manual command so the admin explicitly wants it to run again.
+            await self.trigger_auto_redeem_for_new_codes(codes_list, is_recheck=True)
             
             await ctx.send(f"✅ Auto-redeem process initiated for **{code}**.")
             
@@ -3714,7 +3717,11 @@ class ManageGiftCode(commands.Cog):
                         sent_msg = await message.reply(embed=embed)
                         self.logger.info(f"✅ Successfully auto-added {player_data['nickname']} ({fid}) from channel in guild {message.guild.id}")
                         
-                        # Start immediate redemption process for active codes
+                        # Start immediate redemption for all active codes via the unified queue.
+                        # We DON'T call _redeem_for_member directly here to avoid bypassing the
+                        # global semaphore, deduplication lock, and progress-tracking system.
+                        # Instead, process_auto_redeem() will run for this guild per active code,
+                        # and the new member (already saved to DB above) is included automatically.
                         async def process_initial_redemptions():
                             try:
                                 # Get all valid/active gift codes from unified source
@@ -3727,41 +3734,30 @@ class ManageGiftCode(commands.Cog):
                                     return
 
                                 total = len(active_codes)
-                                embed.set_field_at(2, name="🚀 Auto-Processing", value=f"`Checking {total} active codes...`", inline=False)
+                                embed.set_field_at(2, name="🚀 Auto-Processing", value=(
+                                    f"`Queuing {total} active code(s) via standard redeem system...`\n"
+                                    f"Progress updates will appear in the auto-redeem channel."
+                                ), inline=False)
                                 await sent_msg.edit(embed=embed)
                                 
-                                redeemed = 0
-                                already = 0
-                                failed = 0
-                                
-                                # Process each code
-                                for i, code in enumerate(active_codes):
-                                    embed.set_field_at(2, name="🚀 Auto-Processing", value=f"`Processing code {i+1}/{total}:` **`{code}`**", inline=False)
-                                    await sent_msg.edit(embed=embed)
-                                    
-                                    # Use the core redemption method
-                                    status, s_count, a_count, f_count = await self._redeem_for_member(
-                                        message.guild.id, 
-                                        fid, 
-                                        player_data['nickname'], 
-                                        player_data['furnace_lv'], 
-                                        code
+                                # Queue each code through the standard auto-redeem pipeline for
+                                # this guild only. is_recheck=True so the newly-added member gets
+                                # processed even if the code was previously marked done.
+                                for code in active_codes:
+                                    await self.auto_redeem_queue.put((message.guild.id, code, True))
+                                    self.logger.info(
+                                        f"🆕 Queued code {code} for new member {fid} "
+                                        f"({player_data['nickname']}) in guild {message.guild.id}"
                                     )
-                                    
-                                    redeemed += s_count
-                                    already += a_count
-                                    failed += f_count
-                                    
-                                    # Small delay between codes to be safe with rate limits
-                                    await asyncio.sleep(1)
+                                    # Brief stagger between puts to avoid bursting the queue
+                                    await asyncio.sleep(0.1)
                                 
-                                # Final update
-                                embed.set_field_at(2, name="🚀 Redemption Results", value=(
-                                    f"✅ Success: `{redeemed}`\n"
-                                    f"ℹ️ Already Claimed: `{already}`\n"
-                                    f"❌ Failed: `{failed}`"
+                                # Final UI update — actual results appear in the redeem channel
+                                embed.set_field_at(2, name="🚀 Redemption Queued", value=(
+                                    f"✅ `{total}` code(s) queued for redemption!\n"
+                                    "📊 Progress & results are posted in the auto-redeem channel."
                                 ), inline=False)
-                                embed.title = "✨ Auto-Redeem Complete"
+                                embed.title = "✨ Auto-Redeem Queued"
                                 await sent_msg.edit(embed=embed)
                                 
                             except Exception as e:
@@ -4252,8 +4248,9 @@ class ManageGiftCode(commands.Cog):
                                 color=discord.Color.green()
                             )
                             await modal_interaction.edit_original_response(embed=success_embed)
-                            # Trigger auto-redeem
-                            task = asyncio.create_task(self.cog.trigger_auto_redeem_for_new_codes([(gift_code, datetime.now().strftime("%Y-%m-%d"))]))
+                            # Trigger auto-redeem — is_recheck=True so it works even if
+                            # the code was previously marked as processed (admin added it manually)
+                            task = asyncio.create_task(self.cog.trigger_auto_redeem_for_new_codes([(gift_code, datetime.now().strftime("%Y-%m-%d"))], is_recheck=True))
                             self.cog._bg_tasks.add(task)
                             task.add_done_callback(self.cog._bg_tasks.discard)
                         else:
@@ -4280,8 +4277,8 @@ class ManageGiftCode(commands.Cog):
                                     color=discord.Color.green()
                                 )
                                 await modal_interaction.edit_original_response(embed=success_embed)
-                                # Trigger auto-redeem
-                                task = asyncio.create_task(self.cog.trigger_auto_redeem_for_new_codes([(gift_code, datetime.now().strftime("%Y-%m-%d"))]))
+                                # is_recheck=True: admin explicitly added this code, always trigger
+                                task = asyncio.create_task(self.cog.trigger_auto_redeem_for_new_codes([(gift_code, datetime.now().strftime("%Y-%m-%d"))], is_recheck=True))
                                 self.cog._bg_tasks.add(task)
                                 task.add_done_callback(self.cog._bg_tasks.discard)
                             else:
@@ -4320,8 +4317,8 @@ class ManageGiftCode(commands.Cog):
                                             color=discord.Color.green()
                                         )
                                         await modal_interaction.edit_original_response(embed=success_embed)
-                                        # Trigger auto-redeem
-                                        task = asyncio.create_task(self.cog.trigger_auto_redeem_for_new_codes([(gift_code, datetime.now().strftime("%Y-%m-%d"))]))
+                                        # is_recheck=True: game-API verified, admin intent is explicit
+                                        task = asyncio.create_task(self.cog.trigger_auto_redeem_for_new_codes([(gift_code, datetime.now().strftime("%Y-%m-%d"))], is_recheck=True))
                                         self.cog._bg_tasks.add(task)
                                         task.add_done_callback(self.cog._bg_tasks.discard)
                                         
@@ -4363,8 +4360,8 @@ class ManageGiftCode(commands.Cog):
                                             color=discord.Color.orange()
                                         )
                                         await modal_interaction.edit_original_response(embed=success_embed)
-                                        # Trigger auto-redeem
-                                        task = asyncio.create_task(self.cog.trigger_auto_redeem_for_new_codes([(gift_code, datetime.now().strftime("%Y-%m-%d"))]))
+                                        # is_recheck=True: forced add, admin intent is explicit
+                                        task = asyncio.create_task(self.cog.trigger_auto_redeem_for_new_codes([(gift_code, datetime.now().strftime("%Y-%m-%d"))], is_recheck=True))
                                         self.cog._bg_tasks.add(task)
                                         task.add_done_callback(self.cog._bg_tasks.discard)
                                 except Exception as e:
@@ -4388,8 +4385,8 @@ class ManageGiftCode(commands.Cog):
                                         color=discord.Color.orange()
                                     )
                                     await modal_interaction.edit_original_response(embed=success_embed)
-                                    # Trigger auto-redeem
-                                    task = asyncio.create_task(self.cog.trigger_auto_redeem_for_new_codes([(gift_code, datetime.now().strftime("%Y-%m-%d"))]))
+                                    # is_recheck=True: error fallback, admin wants it triggered regardless
+                                    task = asyncio.create_task(self.cog.trigger_auto_redeem_for_new_codes([(gift_code, datetime.now().strftime("%Y-%m-%d"))], is_recheck=True))
                                     self.cog._bg_tasks.add(task)
                                     task.add_done_callback(self.cog._bg_tasks.discard)
                         
