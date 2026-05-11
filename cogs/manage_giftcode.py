@@ -4285,10 +4285,6 @@ class ManageGiftCode(commands.Cog):
 
         # ── Set Priority Modal submit ──────────────────────────────────────
         if custom_id == "giftcode_set_priority_confirm":
-            if not await self.check_admin_permission(interaction.user.id):
-                await interaction.response.send_message("❌ Admin only.", ephemeral=True)
-                return
-
             class SetPriorityModal(discord.ui.Modal, title="Set Server Redemption Priority"):
                 guild_id_input = discord.ui.TextInput(
                     label="Server ID (or leave blank = this server)",
@@ -4309,6 +4305,11 @@ class ManageGiftCode(commands.Cog):
 
                 async def on_submit(self, modal_interaction: discord.Interaction):
                     try:
+                        # First check if they have basic admin permission
+                        if not await self.cog.check_admin_permission(modal_interaction.user.id):
+                            await modal_interaction.response.send_message("❌ Admin only.", ephemeral=True)
+                            return
+                            
                         raw_gid = self.guild_id_input.value.strip()
                         target_guild_id = int(raw_gid) if raw_gid.isdigit() else modal_interaction.guild.id
                         priority_val = int(self.priority_input.value.strip())
