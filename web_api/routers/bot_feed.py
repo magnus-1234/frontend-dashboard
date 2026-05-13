@@ -1,6 +1,9 @@
 import logging
+import os
+import re
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Request
@@ -25,7 +28,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/bot-feed", tags=["Bot Feed"])
 
 _CACHE: Dict[str, Any] = {"expires_at": 0.0, "payload": None}
-_CACHE_TTL_SECONDS = 10
+_CACHE_TTL_SECONDS = 3
 
 
 @router.get("")
@@ -46,9 +49,14 @@ async def get_bot_feed(request: Request, limit: int = 40):
     events = await _build_events(safe_limit, server_lookup, gift_codes)
     monitors = await _get_monitors()
     auto_redeem_enabled = await _get_auto_redeem_enabled()
+    runtime_events, runtime_summary = await _get_runtime_events(bot, server_lookup)
+    events = [*runtime_events, *events]
+    events.sort(key=_event_sort_key, reverse=True)
+    events = events[:safe_limit]
+    has_live_process = any(event.get("live") for event in runtime_events)
 
     payload = {
-        "status": "online" if bot and getattr(bot, "is_ready", lambda: False)() else "warming",
+        "status": _runtime_status(bot, runtime_summary),
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "cache_ttl_seconds": _CACHE_TTL_SECONDS,
         "summary": {
@@ -59,12 +67,13 @@ async def get_bot_feed(request: Request, limit: int = 40):
             "active_gift_codes": len(gift_codes),
             "monitored_members": monitored_member_count,
             "latency_ms": round(bot.latency * 1000) if bot else None,
+            **runtime_summary,
         },
         "servers": _serialize_guilds(guilds),
         "members": members,
         "events": events,
         "gift_codes": gift_codes,
-        "source": "live_cache" if events or guilds or gift_codes or members else "idle",
+        "source": "live_process" if has_live_process else ("live_cache" if events or guilds or gift_codes or members else "idle"),
     }
     _CACHE["payload"] = payload
     _CACHE["expires_at"] = now + _CACHE_TTL_SECONDS
@@ -171,6 +180,11 @@ async def _get_gift_codes() -> List[Dict[str, Any]]:
 async def _get_monitors() -> List[Dict[str, Any]]:
     if not mongo_enabled() or AllianceMonitoringAdapter is None:
         return []
+    try:
+        return await AllianceMonitoringAdapter.get_all_monitors_async()
+    except Exception as exc:
+        logger.warning("Unable to load monitor count for bot feed: %s", exc)
+        return []
 
 
 async def _count_monitored_members() -> int:
@@ -208,11 +222,6 @@ async def _get_recent_members(limit: int = 60) -> List[Dict[str, Any]]:
             }
         )
     return [member for member in members if member["fid"]]
-    try:
-        return await AllianceMonitoringAdapter.get_all_monitors_async()
-    except Exception as exc:
-        logger.warning("Unable to load monitor count for bot feed: %s", exc)
-        return []
 
 
 async def _get_auto_redeem_enabled() -> int:
@@ -247,6 +256,384 @@ def _serialize_guilds(guilds: list) -> List[Dict[str, Any]]:
 
 def _guild_name_lookup(guilds: list) -> Dict[str, str]:
     return {str(getattr(guild, "id", "")): getattr(guild, "name", "connected server") for guild in guilds}
+
+
+async def _get_runtime_events(bot: Any, server_lookup: Dict[str, str]) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """Read live, in-memory bot cog state so the dashboard shows work before DB writes land."""
+    log_events, log_summary = _get_log_runtime_events()
+    if not bot:
+        return log_events, {
+            "auto_redeem_queue_depth": 0,
+            "auto_redeem_active_jobs": 0,
+            "alliance_monitor_running": False,
+            **log_summary,
+        }
+
+    events: List[Dict[str, Any]] = list(log_events)
+    summary = {
+        "auto_redeem_queue_depth": 0,
+        "auto_redeem_active_jobs": 0,
+        "alliance_monitor_running": False,
+        **log_summary,
+    }
+
+    manage_cog = _get_cog(bot, "ManageGiftCode")
+    if manage_cog:
+        redeem_events, redeem_summary = _get_auto_redeem_runtime_events(manage_cog, server_lookup)
+        events.extend(redeem_events)
+        summary.update(redeem_summary)
+
+    alliance_cog = _get_cog(bot, "Alliance")
+    if alliance_cog:
+        monitor_events, monitor_summary = _get_alliance_runtime_events(alliance_cog)
+        events.extend(monitor_events)
+        summary.update(monitor_summary)
+
+    return events, summary
+
+
+def _get_auto_redeem_runtime_events(cog: Any, server_lookup: Dict[str, str]) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    queue = getattr(cog, "auto_redeem_queue", None)
+    queue_depth = queue.qsize() if queue is not None and hasattr(queue, "qsize") else 0
+    current_jobs = dict(getattr(cog, "current_jobs", {}) or {})
+    live_stats = dict(getattr(cog, "_guild_live_stats", {}) or {})
+    completed_jobs = list(getattr(cog, "_last_completed_jobs", []) or [])
+    events: List[Dict[str, Any]] = []
+
+    for worker_id, job in sorted(current_jobs.items()):
+        try:
+            guild_id, code = job
+        except Exception:
+            continue
+        code = str(code or "").upper()
+        guild_key = str(guild_id)
+        stat = live_stats.get((guild_id, code)) or live_stats.get((_safe_int(guild_id), code)) or {}
+        total = int(stat.get("total") or 0)
+        done = int(stat.get("done") or 0)
+        success = int(stat.get("success") or 0)
+        already = int(stat.get("already") or 0)
+        failed = int(stat.get("failed") or 0)
+        rate_limits = int(stat.get("rate_limits") or 0)
+        percent = round((done / total) * 100, 1) if total else 0
+        server_name = server_lookup.get(guild_key, f"server {guild_key}")
+        status_note = "API rate limiting, retrying slower" if rate_limits else "redeeming members now"
+        events.append(
+            {
+                "id": f"auto-redeem-active-{worker_id}-{guild_key}-{code}",
+                "type": "redeem",
+                "title": "Auto redeem in progress",
+                "message": (
+                    f"Worker {worker_id} is redeeming {code} for {server_name}: "
+                    f"{done}/{total or '?'} players processed ({percent}%). "
+                    f"Success {success}, already {already}, failed {failed}. {status_note}."
+                ),
+                "server": server_name,
+                "new_value": code,
+                "timestamp": _epoch_iso(stat.get("started_at")) or datetime.now(timezone.utc).isoformat(),
+                "live": True,
+                "priority": 100,
+            }
+        )
+
+    if queue_depth and not current_jobs:
+        events.append(
+            {
+                "id": "auto-redeem-queue-waiting",
+                "type": "redeem",
+                "title": "Auto redeem queued",
+                "message": f"{queue_depth} auto-redeem job(s) are waiting for the worker pool.",
+                "server": "Global gift-code system",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "live": True,
+                "priority": 90,
+            }
+        )
+
+    if not current_jobs and not queue_depth and completed_jobs:
+        last = completed_jobs[-1]
+        guild_key = str(last.get("guild_id") or "")
+        server_name = server_lookup.get(guild_key, f"server {guild_key}" if guild_key else "a server")
+        events.append(
+            {
+                "id": f"auto-redeem-completed-{guild_key}-{last.get('code')}-{last.get('finished_at')}",
+                "type": "redeem",
+                "title": "Auto redeem recently completed",
+                "message": (
+                    f"{last.get('code', 'Gift code')} finished for {server_name}: "
+                    f"success {last.get('success', 0)}, already {last.get('already', 0)}, failed {last.get('failed', 0)}."
+                ),
+                "server": server_name,
+                "new_value": last.get("code"),
+                "timestamp": _epoch_iso(last.get("finished_at")) or datetime.now(timezone.utc).isoformat(),
+                "live": True,
+                "priority": 70,
+            }
+        )
+
+    if not events:
+        worker_count = int(getattr(cog, "guild_worker_count", 0) or 0)
+        events.append(
+            {
+                "id": "auto-redeem-workers-ready",
+                "type": "redeem",
+                "title": "Auto redeem worker ready",
+                "message": f"{worker_count or 1} worker(s) are online and waiting for the next gift code.",
+                "server": "Global gift-code system",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "live": False,
+                "priority": 10,
+            }
+        )
+
+    return events, {
+        "auto_redeem_queue_depth": queue_depth,
+        "auto_redeem_active_jobs": len(current_jobs),
+    }
+
+
+def _get_alliance_runtime_events(cog: Any) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    task = getattr(cog, "monitor_alliances", None)
+    running = bool(task and getattr(task, "is_running", lambda: False)())
+    next_iteration = getattr(task, "next_iteration", None) if task else None
+    latest_log = _read_latest_alliance_log(getattr(cog, "log_file", None))
+    event = {
+        "id": "alliance-monitor-runtime",
+        "type": "monitor",
+        "title": "Alliance monitor online" if running else "Alliance monitor standby",
+        "message": "Watching tracked players for furnace, nickname, avatar, and state changes.",
+        "server": "Alliance monitor",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "live": False,
+        "priority": 40,
+    }
+
+    if latest_log:
+        event["message"] = latest_log["message"]
+        event["timestamp"] = latest_log["timestamp"] or event["timestamp"]
+        event["live"] = _is_recent_iso(event["timestamp"], max_age_seconds=600)
+        if event["live"]:
+            event["title"] = "Alliance monitor cycle active"
+            event["priority"] = 60
+    elif next_iteration:
+        event["message"] = f"Watching tracked players. Next scheduled check: {_iso(next_iteration)}."
+
+    return [event], {
+        "alliance_monitor_running": running,
+        "alliance_monitor_next_check": _iso(next_iteration),
+    }
+
+
+def _get_cog(bot: Any, name: str) -> Any:
+    getter = getattr(bot, "get_cog", None)
+    if not callable(getter):
+        return None
+    return getter(name)
+
+
+def _get_log_runtime_events() -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    events: List[Dict[str, Any]] = []
+    for item in _read_recent_bot_log_lines(limit=160):
+        event = _event_from_log_line(item)
+        if event:
+            events.append(event)
+    events.sort(key=_event_sort_key, reverse=True)
+    events = events[:8]
+    has_recent_redeem = any(event.get("type") == "redeem" and event.get("live") for event in events)
+    has_recent_monitor = any(event.get("type") == "monitor" and event.get("live") for event in events)
+    return events, {
+        "auto_redeem_log_active": has_recent_redeem,
+        "alliance_monitor_log_active": has_recent_monitor,
+    }
+
+
+def _read_recent_bot_log_lines(limit: int = 120) -> List[Dict[str, str]]:
+    paths = [
+        Path("discordbot-out.log"),
+        Path("discordbot-error.log"),
+        Path("last_out.txt"),
+        Path("bot_logs_final.txt"),
+        Path("log") / "alliance_monitoring.txt",
+        Path("logs") / "alliance_monitoring.txt",
+    ]
+    lines: List[Dict[str, str]] = []
+    for path in paths:
+        full_path = path if path.is_absolute() else Path(os.getcwd()) / path
+        if not full_path.exists() or not full_path.is_file():
+            continue
+        try:
+            file_lines = _tail_text_lines(full_path, max_lines=limit)
+        except Exception:
+            continue
+        for line in file_lines:
+            cleaned = _strip_ansi(line).strip()
+            if cleaned:
+                lines.append({"path": str(path), "line": cleaned})
+    return lines[-limit:]
+
+
+def _tail_text_lines(path: Path, max_lines: int = 120, chunk_size: int = 65536) -> List[str]:
+    with path.open("rb") as handle:
+        handle.seek(0, os.SEEK_END)
+        size = handle.tell()
+        handle.seek(max(0, size - chunk_size), os.SEEK_SET)
+        text = handle.read().decode("utf-8", errors="ignore")
+    return text.splitlines()[-max_lines:]
+
+
+def _event_from_log_line(item: Dict[str, str]) -> Optional[Dict[str, Any]]:
+    line = item.get("line") or ""
+    lower = line.lower()
+    timestamp = _parse_any_log_timestamp(line)
+    is_recent = _is_recent_iso(timestamp, max_age_seconds=900)
+
+    if "auto-redeem" in lower or "auto redeem" in lower or "auto_redeem" in lower:
+        title = "Auto redeem log update"
+        priority = 75
+        live = is_recent
+        if "processing queued auto-redeem" in lower or "locked auto-redeem" in lower or "started auto-redeem" in lower or "triggering auto-redeem" in lower:
+            title = "Auto redeem in progress"
+            priority = 85
+        elif "completed" in lower or "unlocked auto-redeem" in lower:
+            title = "Auto redeem recently completed"
+            priority = 65
+        elif "no guilds have auto-redeem enabled" in lower or "critical" in lower:
+            title = "Auto redeem needs attention"
+            priority = 80
+        return {
+            "id": f"log-redeem-{abs(hash(line))}",
+            "type": "redeem",
+            "title": title,
+            "message": _clean_log_message(line),
+            "server": "Bot log",
+            "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
+            "live": live,
+            "priority": priority,
+        }
+
+    if (
+        "alliance monitoring cycle" in lower
+        or "monitoring " in lower and "alliance" in lower
+        or "batch processing complete" in lower
+        or "detected " in lower and " changes for alliance" in lower
+    ):
+        return {
+            "id": f"log-monitor-{abs(hash(line))}",
+            "type": "monitor",
+            "title": "Alliance monitor cycle active" if is_recent else "Alliance monitor log update",
+            "message": _clean_log_message(line),
+            "server": "Alliance monitor log",
+            "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
+            "live": is_recent,
+            "priority": 60 if is_recent else 35,
+        }
+
+    return None
+
+
+def _strip_ansi(value: str) -> str:
+    return re.sub(r"\x1b\[[0-9;]*m", "", value)
+
+
+def _clean_log_message(value: str) -> str:
+    cleaned = _strip_ansi(value)
+    cleaned = re.sub(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}:\s*", "", cleaned)
+    cleaned = re.sub(r"^\[[^\]]+\]\s*", "", cleaned)
+    cleaned = re.sub(r"^[^\[]*\[(INFO|WARNING|ERROR|DEBUG)\]\s*[^:]+:\s*", "", cleaned)
+    cleaned = re.sub(r"^[✅❌⚠️🔒🔓📊🔧ℹ️]+\s*", "", cleaned).strip()
+    return cleaned[:240]
+
+
+def _parse_any_log_timestamp(value: str) -> Optional[str]:
+    match = re.search(r"(?P<iso>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", value)
+    if match:
+        try:
+            return datetime.fromisoformat(match.group("iso")).replace(tzinfo=timezone.utc).isoformat()
+        except Exception:
+            pass
+    match = re.search(r"\[(?P<bracket>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]", value)
+    if match:
+        return _parse_log_timestamp(match.group("bracket"))
+    return None
+
+
+def _safe_int(value: Any) -> Optional[int]:
+    try:
+        return int(value)
+    except Exception:
+        return None
+
+
+def _read_latest_alliance_log(log_file: Optional[str]) -> Optional[Dict[str, str]]:
+    if not log_file:
+        return None
+    try:
+        path = Path(log_file)
+        if not path.is_absolute():
+            path = Path(os.getcwd()) / path
+        if not path.exists():
+            return None
+        lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    except Exception:
+        return None
+    for line in reversed(lines[-80:]):
+        match = re.match(r"^\[(?P<ts>[^\]]+)\]\s*(?P<msg>.+)$", line.strip())
+        if not match:
+            continue
+        timestamp = _parse_log_timestamp(match.group("ts"))
+        return {
+            "timestamp": timestamp,
+            "message": match.group("msg"),
+        }
+    return None
+
+
+def _parse_log_timestamp(value: str) -> Optional[str]:
+    try:
+        dt = datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+        return dt.replace(tzinfo=timezone.utc).isoformat()
+    except Exception:
+        return None
+
+
+def _epoch_iso(value: Any) -> Optional[str]:
+    try:
+        return datetime.fromtimestamp(int(value), tz=timezone.utc).isoformat()
+    except Exception:
+        return None
+
+
+def _is_recent_iso(value: Optional[str], max_age_seconds: int) -> bool:
+    if not value:
+        return False
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - parsed.astimezone(timezone.utc)).total_seconds() <= max_age_seconds
+    except Exception:
+        return False
+
+
+def _runtime_status(bot: Any, runtime_summary: Dict[str, Any]) -> str:
+    if runtime_summary.get("auto_redeem_active_jobs"):
+        return "redeeming"
+    if runtime_summary.get("auto_redeem_queue_depth"):
+        return "queued"
+    if runtime_summary.get("auto_redeem_log_active"):
+        return "redeeming"
+    if runtime_summary.get("alliance_monitor_running"):
+        return "monitoring"
+    if runtime_summary.get("alliance_monitor_log_active"):
+        return "monitoring"
+    return "online" if bot and getattr(bot, "is_ready", lambda: False)() else "warming"
+
+
+def _event_sort_key(event: Dict[str, Any]) -> tuple[int, str]:
+    try:
+        priority = int(event.get("priority") or 0)
+    except Exception:
+        priority = 0
+    return priority, str(event.get("timestamp") or "")
 
 
 def _normalize_event(event: Dict[str, Any]) -> Dict[str, Any]:
