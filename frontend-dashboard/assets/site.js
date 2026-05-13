@@ -144,43 +144,16 @@
       heroOldAvatar: document.querySelector("[data-hero-old-avatar]"),
       heroNewAvatar: document.querySelector("[data-hero-new-avatar]")
     };
-    const fallbackEvents = [
+    const idleEvents = [
       {
-        type: "redeem",
-        title: "Gift code redeem",
-        message: "Redeeming code LoveMoM2026 for Magnus ID 720263644 FC4-2 State 3063 at ICe angel server.",
-        player: "Magnus",
-        fid: "720263644",
-        state: "3063",
-        new_value: "LoveMoM2026"
-      },
-      {
-        type: "furnace",
-        title: "Furnace upgrade detected",
-        message: "Magnus State 3063 upgraded FC from FC4-1 to FC4-2.",
-        player: "Magnus",
-        fid: "720263644",
-        old_value: "FC4-1",
-        new_value: "FC4-2"
-      },
-      {
-        type: "avatar",
-        title: "Avatar change detected",
-        message: "Primrose changed her avatar.",
-        player: "Primrose",
-        old_avatar: "https://cdn.discordapp.com/embed/avatars/1.png",
-        new_avatar: "https://cdn.discordapp.com/embed/avatars/4.png"
-      },
-      {
-        type: "name",
-        title: "Name change detected",
-        message: "A monitored player changed name.",
-        player: "ICe angel member",
-        old_value: "Old name",
-        new_value: "New name"
+        type: "idle",
+        title: "Waiting for live bot activity",
+        message: "No recent alliance monitor, gift-code, or redemption event is available yet.",
+        player: "",
+        fid: ""
       }
     ];
-    let feedEvents = fallbackEvents;
+    let feedEvents = idleEvents;
     let feedIndex = 0;
 
     const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
@@ -217,7 +190,9 @@
         event.new_value && event.type === "redeem" ? `Code ${event.new_value}` : "",
         event.old_value && event.new_value && event.type !== "avatar" && event.type !== "redeem" ? `${event.old_value} -> ${event.new_value}` : ""
       ].filter(Boolean);
-      els.meta.innerHTML = meta.map((item) => `<span>${escapeHtml(item)}</span>`).join("");
+      els.meta.innerHTML = meta.length
+        ? meta.map((item) => `<span>${escapeHtml(item)}</span>`).join("")
+        : "<span>real bot data only</span><span>waiting for events</span>";
       const hasAvatarPair = event.type === "avatar" && (event.old_avatar || event.old_value) && (event.new_avatar || event.new_value);
       els.avatarCompare.classList.toggle("is-visible", Boolean(hasAvatarPair));
       if (hasAvatarPair) {
@@ -238,7 +213,9 @@
         event.new_value && event.type === "redeem" ? `Code ${event.new_value}` : ""
       ].filter(Boolean);
       if (els.heroMeta) {
-        els.heroMeta.innerHTML = meta.map((item) => `<span>${escapeHtml(item)}</span>`).join("");
+        els.heroMeta.innerHTML = meta.length
+          ? meta.map((item) => `<span>${escapeHtml(item)}</span>`).join("")
+          : "<span>real bot data only</span><span>waiting for events</span>";
       }
       if (els.heroAvatars) {
         els.heroAvatars.classList.toggle("is-visible", Boolean(hasAvatarPair));
@@ -256,7 +233,7 @@
           <div><b>${escapeHtml(event.title || "Process update")}</b><span>${escapeHtml(event.message || "")}</span></div>
         </div>
       `).join("");
-      if (els.eventCount) els.eventCount.textContent = `${feedEvents.length} cached events`;
+      if (els.eventCount) els.eventCount.textContent = feedEvents[0]?.type === "idle" ? "no recent events" : `${feedEvents.length} live records`;
     };
     const rotate = () => {
       if (!feedEvents.length) return;
@@ -269,7 +246,7 @@
       if (!els.serverGrid) return;
       els.serverGrid.innerHTML = list.length
         ? list.map((server) => `<span class="server-chip">${escapeHtml(server.name)} · ${compactNumber(server.members || 0)}</span>`).join("")
-        : '<span class="server-chip">ICe angel · State 3063</span><span class="server-chip">Demo loop · standby</span>';
+        : '<span class="server-chip">No connected server cache yet</span>';
     };
     const syncFeed = () => {
       fetch("/api/bot-feed?limit=60", { headers: { Accept: "application/json" } })
@@ -278,34 +255,34 @@
           return response.json();
         })
         .then((feed) => {
-          feedEvents = Array.isArray(feed.events) && feed.events.length ? feed.events : fallbackEvents;
+          feedEvents = Array.isArray(feed.events) && feed.events.length ? feed.events : idleEvents;
           feedIndex = 0;
           renderQueue();
           renderServers(feed.servers || []);
-          setMetric("servers", feed.summary?.servers || 0);
+          setMetric("members", feed.summary?.monitored_members || 0);
           setMetric("monitors", feed.summary?.active_monitors || 0);
           setMetric("redeem", feed.summary?.auto_redeem_servers || 0);
           setMetric("codes", feed.summary?.active_gift_codes || 0);
           if (els.state) els.state.textContent = feed.status || "online";
-          if (els.heroState) els.heroState.textContent = feed.status === "warming" ? "standby loop" : "live process";
-          if (els.source) els.source.textContent = feed.source === "demo_loop" ? "demo loop" : "live cache";
+          if (els.heroState) els.heroState.textContent = feed.source === "idle" ? "waiting for data" : "live process";
+          if (els.source) els.source.textContent = feed.source === "idle" ? "idle" : "live cache";
           const updatedAt = `updated ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
           if (els.clock) els.clock.textContent = updatedAt;
           if (els.heroTime) els.heroTime.textContent = updatedAt;
           rotate();
         })
         .catch(() => {
-          feedEvents = fallbackEvents;
+          feedEvents = idleEvents;
           renderQueue();
           renderServers([]);
-          setMetric("servers", "Live");
-          setMetric("monitors", "24/7");
-          setMetric("redeem", "Loop");
-          setMetric("codes", "Ready");
+          setMetric("members", 0);
+          setMetric("monitors", 0);
+          setMetric("redeem", 0);
+          setMetric("codes", 0);
           if (els.state) els.state.textContent = "standby";
-          if (els.heroState) els.heroState.textContent = "standby loop";
-          if (els.source) els.source.textContent = "cached demo";
-          if (els.heroTime) els.heroTime.textContent = "showing cached activity";
+          if (els.heroState) els.heroState.textContent = "waiting for API";
+          if (els.source) els.source.textContent = "api unavailable";
+          if (els.heroTime) els.heroTime.textContent = "waiting for bot API";
           rotate();
         });
     };

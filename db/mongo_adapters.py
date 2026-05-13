@@ -674,6 +674,40 @@ class AllianceMembersAdapter:
             return []
 
     @staticmethod
+    async def count_members_async() -> int:
+        """Count monitored alliance members without loading every document."""
+        try:
+            db = await _get_db_wos_async()
+            return int(await db[AllianceMembersAdapter.COLL].count_documents({}))
+        except Exception as e:
+            logger.error(f'Failed to count alliance members (async) from Mongo: {e}')
+            return 0
+
+    @staticmethod
+    async def get_recent_members_async(limit: int = 80) -> list:
+        """Get recently checked/updated members for the public status feed."""
+        try:
+            db = await _get_db_wos_async()
+            safe_limit = max(1, min(int(limit), 200))
+            projection = {
+                '_id': 0,
+                'fid': 1,
+                'nickname': 1,
+                'furnace_lv': 1,
+                'avatar_image': 1,
+                'state_id': 1,
+                'alliance_id': 1,
+                'alliance': 1,
+                'last_checked': 1,
+                'updated_at': 1,
+            }
+            cursor = db[AllianceMembersAdapter.COLL].find({}, projection).sort('updated_at', -1).limit(safe_limit)
+            return await cursor.to_list(length=None)
+        except Exception as e:
+            logger.error(f'Failed to get recent alliance members (async) from Mongo: {e}')
+            return []
+
+    @staticmethod
     def get_member(fid: str) -> Optional[Dict[str, Any]]:
         """Get a single alliance member"""
         try:

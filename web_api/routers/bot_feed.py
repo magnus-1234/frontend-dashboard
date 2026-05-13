@@ -10,6 +10,7 @@ from admin_utils import format_furnace_level
 try:
     from db.mongo_adapters import (
         AllianceEventsAdapter,
+        AllianceMembersAdapter,
         AllianceMonitoringAdapter,
         AutoRedeemSettingsAdapter,
         GiftCodesAdapter,
@@ -18,13 +19,13 @@ try:
     )
 except ImportError:
     mongo_enabled = lambda: False
-    AllianceEventsAdapter = AllianceMonitoringAdapter = AutoRedeemSettingsAdapter = GiftCodesAdapter = GiftCodeRedemptionAdapter = None
+    AllianceEventsAdapter = AllianceMembersAdapter = AllianceMonitoringAdapter = AutoRedeemSettingsAdapter = GiftCodesAdapter = GiftCodeRedemptionAdapter = None
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/bot-feed", tags=["Bot Feed"])
 
 _CACHE: Dict[str, Any] = {"expires_at": 0.0, "payload": None}
-_CACHE_TTL_SECONDS = 30
+_CACHE_TTL_SECONDS = 10
 
 
 @router.get("")
@@ -39,8 +40,10 @@ async def get_bot_feed(request: Request, limit: int = 40):
     bot = getattr(request.app.state, "bot", None)
     guilds = list(getattr(bot, "guilds", []) or [])
     server_lookup = _guild_name_lookup(guilds)
-    events = await _build_events(safe_limit, server_lookup)
     gift_codes = await _get_gift_codes()
+    members = await _get_recent_members(limit=60)
+    monitored_member_count = await _count_monitored_members()
+    events = await _build_events(safe_limit, server_lookup, gift_codes)
     monitors = await _get_monitors()
     auto_redeem_enabled = await _get_auto_redeem_enabled()
 
@@ -54,26 +57,29 @@ async def get_bot_feed(request: Request, limit: int = 40):
             "active_monitors": len(monitors),
             "auto_redeem_servers": auto_redeem_enabled,
             "active_gift_codes": len(gift_codes),
+            "monitored_members": monitored_member_count,
             "latency_ms": round(bot.latency * 1000) if bot else None,
         },
         "servers": _serialize_guilds(guilds),
-        "events": events or _demo_events(),
+        "members": members,
+        "events": events,
         "gift_codes": gift_codes,
-        "source": "live_cache" if events or guilds or gift_codes else "demo_loop",
+        "source": "live_cache" if events or guilds or gift_codes or members else "idle",
     }
     _CACHE["payload"] = payload
     _CACHE["expires_at"] = now + _CACHE_TTL_SECONDS
     return payload
 
 
-async def _build_events(limit: int, server_lookup: Dict[str, str]) -> List[Dict[str, Any]]:
+async def _build_events(limit: int, server_lookup: Dict[str, str], gift_codes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     if not mongo_enabled():
-        return []
+        return _get_gift_code_events(gift_codes, limit)
     events = []
     if AllianceEventsAdapter is not None:
         raw_events = await AllianceEventsAdapter.get_global_recent_events_async(limit=limit)
         events.extend(_normalize_event(event) for event in raw_events)
     events.extend(await _get_redemption_events(limit, server_lookup))
+    events.extend(_get_gift_code_events(gift_codes, limit))
     events.sort(key=lambda item: item.get("timestamp") or "", reverse=True)
     return events[:limit]
 
@@ -112,6 +118,30 @@ async def _get_redemption_events(limit: int, server_lookup: Dict[str, str]) -> L
     return events
 
 
+def _get_gift_code_events(gift_codes: List[Dict[str, Any]], limit: int) -> List[Dict[str, Any]]:
+    events = []
+    for item in gift_codes[: max(0, min(limit, 12))]:
+        code = item.get("code")
+        if not code:
+            continue
+        status = str(item.get("status") or "active")
+        auto_processed = bool(item.get("auto_redeem_processed"))
+        events.append(
+            {
+                "id": f"gift-code-{code}",
+                "type": "gift_code",
+                "title": "Active gift code detected",
+                "message": f"Gift code {code} is {status}. Auto redeem {'processed' if auto_processed else 'pending'} in bot records.",
+                "player": None,
+                "fid": "",
+                "server": "Global gift-code system",
+                "new_value": code,
+                "timestamp": _iso(item.get("updated_at")),
+            }
+        )
+    return events
+
+
 async def _get_gift_codes() -> List[Dict[str, Any]]:
     if not mongo_enabled() or GiftCodesAdapter is None:
         return []
@@ -141,6 +171,43 @@ async def _get_gift_codes() -> List[Dict[str, Any]]:
 async def _get_monitors() -> List[Dict[str, Any]]:
     if not mongo_enabled() or AllianceMonitoringAdapter is None:
         return []
+
+
+async def _count_monitored_members() -> int:
+    if not mongo_enabled() or AllianceMembersAdapter is None:
+        return 0
+    try:
+        return await AllianceMembersAdapter.count_members_async()
+    except Exception as exc:
+        logger.warning("Unable to count monitored members for bot feed: %s", exc)
+        return 0
+
+
+async def _get_recent_members(limit: int = 60) -> List[Dict[str, Any]]:
+    if not mongo_enabled() or AllianceMembersAdapter is None:
+        return []
+    try:
+        raw_members = await AllianceMembersAdapter.get_recent_members_async(limit=limit)
+    except Exception as exc:
+        logger.warning("Unable to load monitored members for bot feed: %s", exc)
+        return []
+
+    members = []
+    for item in raw_members:
+        furnace_lv = item.get("furnace_lv", 0)
+        members.append(
+            {
+                "fid": str(item.get("fid") or ""),
+                "nickname": item.get("nickname") or "Unknown player",
+                "furnace_lv": furnace_lv,
+                "furnace_lv_formatted": _format_furnace(furnace_lv),
+                "avatar_image": item.get("avatar_image") or "",
+                "state_id": str(item.get("state_id") or ""),
+                "alliance_id": item.get("alliance_id") or item.get("alliance"),
+                "last_checked": _iso(item.get("last_checked") or item.get("updated_at")),
+            }
+        )
+    return [member for member in members if member["fid"]]
     try:
         return await AllianceMonitoringAdapter.get_all_monitors_async()
     except Exception as exc:
@@ -238,54 +305,3 @@ def _iso(value: Any) -> Optional[str]:
     if isinstance(value, datetime):
         return value.astimezone(timezone.utc).isoformat()
     return str(value)
-
-
-def _demo_events() -> List[Dict[str, Any]]:
-    avatar_old = "https://cdn.discordapp.com/embed/avatars/1.png"
-    avatar_new = "https://cdn.discordapp.com/embed/avatars/4.png"
-    return [
-        {
-            "id": "demo-redeem-lovemom",
-            "type": "redeem",
-            "title": "Gift code redeem",
-            "message": "Redeeming code LoveMoM2026 for Magnus at ICe angel server",
-            "player": "Magnus",
-            "fid": "720263644",
-            "server": "ICe angel",
-            "state": "3063",
-            "new_value": "LoveMoM2026",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        },
-        {
-            "id": "demo-furnace-magnus",
-            "type": "furnace",
-            "title": "Furnace upgrade detected",
-            "message": "Magnus State 3063 upgraded FC from FC4-1 to FC4-2",
-            "player": "Magnus",
-            "fid": "720263644",
-            "state": "3063",
-            "old_value": "FC4-1",
-            "new_value": "FC4-2",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        },
-        {
-            "id": "demo-avatar-primrose",
-            "type": "avatar",
-            "title": "Avatar change detected",
-            "message": "Primrose changed her avatar",
-            "player": "Primrose",
-            "old_avatar": avatar_old,
-            "new_avatar": avatar_new,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        },
-        {
-            "id": "demo-name-change",
-            "type": "name",
-            "title": "Name change detected",
-            "message": "A monitored player changed name",
-            "player": "ICe angel member",
-            "old_value": "Old name",
-            "new_value": "New name",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        },
-    ]
