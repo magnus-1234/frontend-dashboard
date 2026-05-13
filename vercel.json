@@ -1,4 +1,7 @@
 {
+  "name": "whiteout-survival-bot",
+  "cleanUrls": true,
+  "trailingSlash": false,
   "rewrites": [
     {
       "source": "/api/:path*",
