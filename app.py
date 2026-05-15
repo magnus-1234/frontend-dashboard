@@ -129,7 +129,7 @@ def is_ci_environment() -> bool:
 # Legacy: Handle venv setup if NOT in container/CI
 if not is_container() and not is_ci_environment():
     if sys.prefix == sys.base_prefix:
-        venv_path = os.path.join(os.path.dirname(__file__), 'bot_venv')
+        venv_path = os.path.join(os.path.dirname(__file__), '.venv')
         
         if sys.platform == "win32":
             venv_python_name = os.path.join(venv_path, "Scripts", "python.exe")
@@ -138,18 +138,21 @@ if not is_container() and not is_ci_environment():
         
         if not os.path.exists(venv_path):
             try:
-                print("[SETUP] Creating virtual environment 'bot_venv'...")
+                print(f"[SETUP] Creating virtual environment '{venv_path}'...")
                 subprocess.check_call([sys.executable, "-m", "venv", venv_path], timeout=300)
-                
-                if sys.platform == "win32":
-                    print(f"[SETUP] Created. To use it, run: {venv_python_name} {os.path.basename(sys.argv[0])}")
-                    sys.exit(0)
-                else:
-                    print("[SETUP] Restarting in virtual environment...")
-                    os.execv(venv_python_name, [venv_python_name] + sys.argv)
             except Exception as e:
                 print(f"[WARN] Could not create venv: {e}")
-                # Continue anyway - deps are already installed
+                
+        if os.path.exists(venv_path):
+            try:
+                if sys.platform == "win32":
+                    print(f"[SETUP] To use venv, run: {venv_python_name} {os.path.basename(sys.argv[0])}")
+                    # In Windows, we can't easily execv, but usually they run run.bat
+                else:
+                    print(f"[SETUP] Restarting in virtual environment ({venv_python_name})...")
+                    os.execv(venv_python_name, [venv_python_name] + sys.argv)
+            except Exception as e:
+                print(f"[WARN] Could not execv into venv: {e}")
 print("[SETUP] Bot initialization complete")
 
 # ============================================================================
