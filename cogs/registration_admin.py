@@ -205,16 +205,18 @@ class RegistrationAdmin(commands.Cog):
                 await interaction.followup.send("❌ Database not available.", ephemeral=True)
                 return
 
-            doc = await PendingConfigAdapter.get_by_guild_async(int(guild_id))
+            raw_guild_id = guild_id.replace("/reg-approve ", "").replace("/reg-deny ", "").strip()
+            
+            doc = await PendingConfigAdapter.get_by_guild_async(int(raw_guild_id))
             if not doc or doc.get("status") != "pending":
                 await interaction.followup.send(
-                    f"⚠️ No pending registration found for guild `{guild_id}`.", ephemeral=True
+                    f"⚠️ No pending registration found for guild `{raw_guild_id}`.", ephemeral=True
                 )
                 return
 
             await _do_approve(
-                interaction, guild_id,
-                doc.get("guild_name", guild_id),
+                interaction, raw_guild_id,
+                doc.get("guild_name", raw_guild_id),
                 doc.get("alliance_name", ""),
                 doc.get("discord_user_id", "0"),
                 doc.get("discord_username", "Unknown")
@@ -244,16 +246,18 @@ class RegistrationAdmin(commands.Cog):
                 await interaction.followup.send("❌ Database not available.", ephemeral=True)
                 return
 
-            doc = await PendingConfigAdapter.get_by_guild_async(int(guild_id))
+            raw_guild_id = guild_id.replace("/reg-approve ", "").replace("/reg-deny ", "").strip()
+            
+            doc = await PendingConfigAdapter.get_by_guild_async(int(raw_guild_id))
             if not doc or doc.get("status") != "pending":
                 await interaction.followup.send(
-                    f"⚠️ No pending registration found for guild `{guild_id}`.", ephemeral=True
+                    f"⚠️ No pending registration found for guild `{raw_guild_id}`.", ephemeral=True
                 )
                 return
 
             await _do_deny(
-                interaction, guild_id,
-                doc.get("guild_name", guild_id),
+                interaction, raw_guild_id,
+                doc.get("guild_name", raw_guild_id),
                 doc.get("discord_user_id", "0"),
                 doc.get("discord_username", "Unknown")
             )
