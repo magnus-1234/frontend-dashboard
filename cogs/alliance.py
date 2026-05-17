@@ -264,7 +264,7 @@ class Alliance(commands.Cog):
                             )
                             embed.add_field(
                                 name="🔑 Getting Access",
-                                value="To unlock these features for your server, you **must contact an administrator**. Please click the **Contact Administrator** button below to join our support server and request an Access Code.",
+                                value="To unlock these features for your server, please configure them using the **`/manage`** command and wait for administrator review.",
                                 inline=False
                             )
                             embed.set_thumbnail(url=avatar_url)
@@ -328,7 +328,7 @@ class Alliance(commands.Cog):
                                 inline=False
                             )
                             embed.set_thumbnail(url=avatar_url)
-                            embed.set_footer(text="Page 3 of 3 • Click Contact Administrator to request access")
+                            embed.set_footer(text="Page 3 of 3 • Use /manage to request access")
                             return embed
 
                         def update_buttons(self):
@@ -363,9 +363,9 @@ class Alliance(commands.Cog):
                                 understood_btn.callback = self.understood
                                 self.add_item(understood_btn)
 
-                            # Contact Administrator button
+                            # Support Server button
                             self.add_item(discord.ui.Button(
-                                label="Contact Administrator",
+                                label="Support Server",
                                 style=discord.ButtonStyle.link,
                                 url="https://discord.gg/bP5JQFH2M5"
                             ))
