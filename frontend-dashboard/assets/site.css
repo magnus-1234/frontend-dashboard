@@ -451,6 +451,7 @@ h3 {
   width: max-content;
   max-width: min(100%, 92vw);
   margin-top: 0.5rem;
+  min-height: 1.4em;
   white-space: nowrap;
   background: linear-gradient(90deg, #8de8ff 0%, #c7a2ff 34%, #ff8bc8 68%, #ffe07b 100%);
   background-clip: text;
@@ -2412,4 +2413,76 @@ body,
   background:   rgba(0, 0, 0, 0.08);
   border-color: rgba(0, 0, 0, 0.20);
   color:        var(--foreground);
+}
+
+/* Light mode specific text overrides for inline HTML elements */
+[data-theme="light"] .hero-feed-top,
+[data-theme="light"] .status-topline,
+[data-theme="light"] .radar-topline {
+  color: var(--muted-foreground);
+}
+[data-theme="light"] .hero-feed-top b {
+  color: #059669;
+}
+[data-theme="light"] .hero-feed-copy strong {
+  color: var(--foreground);
+}
+[data-theme="light"] .hero-feed-copy span,
+[data-theme="light"] .spotlight-event p,
+[data-theme="light"] .live-metrics span,
+[data-theme="light"] .live-process-intro .section-copy {
+  color: var(--muted-foreground);
+}
+[data-theme="light"] .hero-feed-meta span,
+[data-theme="light"] .event-meta-row span,
+[data-theme="light"] .server-chip,
+[data-theme="light"] .dispatch-bubble-tags span {
+  color: var(--muted-foreground);
+  border-color: rgba(0, 0, 0, 0.1);
+  background: rgba(0, 0, 0, 0.03);
+}
+[data-theme="light"] .showcase-card {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+[data-theme="light"] .showcase-card p {
+  color: #5b21b6;
+  background: rgba(124, 58, 237, 0.08);
+  border-color: rgba(124, 58, 237, 0.2);
+}
+[data-theme="light"] .showcase-card:hover {
+  background: #f7f7f9;
+  border-color: rgba(124, 58, 237, 0.35);
+  box-shadow: 0 12px 28px -12px rgba(124, 58, 237, 0.15);
+}
+[data-theme="light"] .live-pill {
+  color: #059669;
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+[data-theme="light"] .live-pill.recent {
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.2);
+}
+[data-theme="light"] .live-pill.idle {
+  color: var(--muted-foreground);
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+[data-theme="light"] .live-refresh {
+  color: var(--foreground);
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.1);
+}
+[data-theme="light"] .live-refresh:hover {
+  background: #f7f7f9;
+}
+[data-theme="light"] .live-process-checks span {
+  color: #5b21b6;
+  background: rgba(124, 58, 237, 0.05);
+  border-color: rgba(124, 58, 237, 0.15);
+}
+[data-theme="light"] .live-process-header {
+  border-bottom-color: rgba(0, 0, 0, 0.08);
 }
