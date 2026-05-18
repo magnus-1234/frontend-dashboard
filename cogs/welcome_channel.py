@@ -295,8 +295,16 @@ class WelcomeChannel(commands.Cog):
             if bg_image_url:
                 # Use custom background image
                 try:
-                    if bg_image_url.startswith('/api/static/'):
-                        # Load from local filesystem
+                    if bg_image_url.startswith('data:image/'):
+                        # Decode base64 directly from database string
+                        import base64
+                        b64_data = bg_image_url.split(',', 1)[1]
+                        bg_data = base64.b64decode(b64_data)
+                        img = Image.open(io.BytesIO(bg_data))
+                        img = img.convert('RGB')
+                        img = img.resize((width, height))
+                    elif bg_image_url.startswith('/api/static/'):
+                        # Load from local filesystem (legacy support)
                         filename = bg_image_url.split('/')[-1]
                         filepath = os.path.join("data", "uploads", filename)
                         img = Image.open(filepath)

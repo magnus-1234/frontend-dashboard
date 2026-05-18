@@ -23,16 +23,19 @@ async def upload_image(file: UploadFile = File(...)):
     if not file:
         return {"status": "error", "message": "No file uploaded"}
 
-    ext = file.filename.split('.')[-1] if '.' in file.filename else 'png'
-    filename = f"{uuid.uuid4()}.{ext}"
-    os.makedirs("data/uploads", exist_ok=True)
-    filepath = os.path.join("data/uploads", filename)
+    content = await file.read()
+    # Limit size to 4MB to safely fit inside MongoDB 16MB document limit
+    if len(content) > 4 * 1024 * 1024:
+        return {"status": "error", "message": "Image too large (max 4MB)"}
 
-    with open(filepath, "wb") as f:
-        content = await file.read()
-        f.write(content)
+    import base64
+    ext = file.filename.split('.')[-1].lower() if '.' in file.filename else 'png'
+    mime_type = "image/jpeg" if ext in ['jpg', 'jpeg'] else f"image/{ext}"
+    
+    b64_data = base64.b64encode(content).decode('utf-8')
+    data_uri = f"data:{mime_type};base64,{b64_data}"
 
-    return {"url": f"/api/static/{filename}"}
+    return {"url": data_uri}
 
 
 # ─────────────────────────────────────────
