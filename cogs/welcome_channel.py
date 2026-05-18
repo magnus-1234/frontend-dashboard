@@ -341,47 +341,48 @@ class WelcomeChannel(commands.Cog):
                     if resp.status == 200:
                         avatar_data = await resp.read()
                         avatar = Image.open(io.BytesIO(avatar_data))
-                        avatar = avatar.resize((180, 180))
+                        avatar = avatar.resize((220, 220))
                         
                         # Create circular mask
-                        mask = Image.new('L', (180, 180), 0)
+                        mask = Image.new('L', (220, 220), 0)
                         mask_draw = ImageDraw.Draw(mask)
-                        mask_draw.ellipse((0, 0, 180, 180), fill=255)
+                        mask_draw.ellipse((0, 0, 220, 220), fill=255)
                         
                         # Create white circle background
-                        circle_bg = Image.new('RGB', (190, 190), (255, 255, 255))
-                        circle_mask = Image.new('L', (190, 190), 0)
+                        circle_bg = Image.new('RGB', (240, 240), (255, 255, 255))
+                        circle_mask = Image.new('L', (240, 240), 0)
                         circle_draw = ImageDraw.Draw(circle_mask)
-                        circle_draw.ellipse((0, 0, 190, 190), fill=255)
+                        circle_draw.ellipse((0, 0, 240, 240), fill=255)
                         
                         # Paste white circle onto main image
-                        img.paste(circle_bg, (60, 55), circle_mask)
+                        img.paste(circle_bg, (40, 30), circle_mask)
                         
                         # Paste avatar
                         avatar_rgb = avatar.convert('RGB')
-                        img.paste(avatar_rgb, (65, 60), mask)
+                        img.paste(avatar_rgb, (50, 40), mask)
             
             # Load modern fonts with better styling
             try:
-                # Try to load Arial Bold for headings - more impactful
-                font_large = ImageFont.truetype("arialbd.ttf", 72)  # Larger, bolder server name
-                font_medium = ImageFont.truetype("arialbd.ttf", 52)  # Bold welcome text
-                font_small = ImageFont.truetype("arial.ttf", 38)  # Regular for member count
+                # Try to load the VarelaRound font which matches the reference image
+                font_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'fonts', 'VarelaRound.ttf')
+                font_large = ImageFont.truetype(font_path, 48)  # Large main text
+                font_medium = ImageFont.truetype(font_path, 42)  # Secondary text
+                font_small = ImageFont.truetype(font_path, 32)
             except Exception as e:
-                logger.warning(f"Failed to load Arial Bold, trying regular Arial: {e}")
+                logger.warning(f"Failed to load VarelaRound, trying Arial Bold: {e}")
                 try:
-                    # Fallback to regular arial with increased sizes
-                    font_large = ImageFont.truetype("arial.ttf", 70)
-                    font_medium = ImageFont.truetype("arial.ttf", 50)
-                    font_small = ImageFont.truetype("arial.ttf", 36)
+                    # Fallback to arial
+                    font_large = ImageFont.truetype("arialbd.ttf", 48)
+                    font_medium = ImageFont.truetype("arialbd.ttf", 42)
+                    font_small = ImageFont.truetype("arial.ttf", 32)
                 except Exception as e2:
                     logger.warning(f"Failed to load Arial, trying project font: {e2}")
                     try:
                         # Try project font as last resort before default
                         font_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'fonts', 'unifont-16.0.04.otf')
-                        font_large = ImageFont.truetype(font_path, 70)
-                        font_medium = ImageFont.truetype(font_path, 50)
-                        font_small = ImageFont.truetype(font_path, 36)
+                        font_large = ImageFont.truetype(font_path, 48)
+                        font_medium = ImageFont.truetype(font_path, 42)
+                        font_small = ImageFont.truetype(font_path, 32)
                     except:
                         # Fallback to default font
                         logger.warning("All font loading failed, using default font")
@@ -389,8 +390,8 @@ class WelcomeChannel(commands.Cog):
                         font_medium = ImageFont.load_default()
                         font_small = ImageFont.load_default()
             
-            # Prepare text content - 3 line layout
-            text_x = 280
+            # Prepare text content - 2 line layout
+            text_x = 300
             
             # ── Pull custom text from DB settings ──────────────────────
             def _resolve_img(template: str) -> str:
@@ -402,54 +403,56 @@ class WelcomeChannel(commands.Cog):
                     .replace('{member_count}', ordinal_sfx(member.guild.member_count))
                     .replace('{date}',         datetime.utcnow().strftime('%B %d, %Y')))
 
-            raw_title    = settings.get('embed_title',    'Welcome {username}') if settings else 'Welcome {username}'
-            raw_subtitle = settings.get('embed_subtitle', 'to {server}')        if settings else 'to {server}'
+            raw_title = settings.get('embed_title') if settings else None
+            raw_subtitle = settings.get('embed_subtitle') if settings else None
+            
+            # Default to the 2-line layout seen in the reference image
+            if not raw_title:
+                raw_title = 'Welcome {username} to {server}'
+            if not raw_subtitle:
+                raw_subtitle = 'you are the {member_count} member!'
 
-            # Line 1: Welcome username (combined)
+            # Line 1: Welcome username to Server
             welcome_text = _resolve_img(raw_title)
             
-            # Line 2: to Server Name (large, bold, main focus)
-            server_text = _resolve_img(raw_subtitle)
-            
-            # Line 3: Member count with ordinal suffix
-            member_count = member.guild.member_count
-            # Add ordinal suffix (st, nd, rd, th)
-            if 10 <= member_count % 100 <= 20:
-                suffix = 'th'
-            else:
-                suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(member_count % 10, 'th')
-            count_text = f"you are the {member_count:,}{suffix} member!"
+            # Line 2: Member count
+            count_text = _resolve_img(raw_subtitle)
 
             # Enhanced text styling
             text_color = (255, 255, 255)  # Pure white
             
-            # Helper function to draw text with shadow and stroke
-            def draw_text_with_effects(xy, text, font, is_bold=False):
+            # Helper function to draw text with heavy stroke
+            def draw_text_with_effects(xy, text, font):
                 x, y = xy
                 
-                # Draw shadow (offset down and right)
-                shadow_offset = 5 if is_bold else 3
-                draw.text((x + shadow_offset, y + shadow_offset), text, 
-                         fill=(20, 20, 20), font=font)
-                
-                # Draw strong stroke for better visibility
-                stroke_width = 5 if is_bold else 3
+                # Draw thick black stroke for readability on any background
+                stroke_width = 4
                 draw.text((x, y), text, fill=text_color, font=font,
                          stroke_width=stroke_width, stroke_fill=(0, 0, 0))
 
-            # Draw text with 3-line layout
-            current_y = 60
+            # Calculate text height for vertical centering
+            try:
+                bbox1 = draw.textbbox((0, 0), welcome_text, font=font_large)
+                bbox2 = draw.textbbox((0, 0), count_text, font=font_medium)
+                h1 = bbox1[3] - bbox1[1]
+                h2 = bbox2[3] - bbox2[1]
+            except AttributeError:
+                # Fallback for older Pillow versions
+                w1, h1 = draw.textsize(welcome_text, font=font_large)
+                w2, h2 = draw.textsize(count_text, font=font_medium)
+                
+            spacing = 15
+            total_text_height = h1 + h2 + spacing
             
-            # Line 1: "Welcome username"
-            draw_text_with_effects((text_x, current_y), welcome_text, font_medium, is_bold=True)
-            current_y += 70
+            # Vertically center text block
+            start_y = (height - total_text_height) // 2
             
-            # Line 2: "to Server name" (large, bold, hero text)
-            draw_text_with_effects((text_x, current_y), server_text, font_large, is_bold=True)
-            current_y += 90
+            # Draw Line 1
+            draw_text_with_effects((text_x, start_y), welcome_text, font_large)
             
-            # Line 3: Member count
-            draw_text_with_effects((text_x, current_y), count_text, font_small, is_bold=False)
+            # Draw Line 2
+            current_y = start_y + h1 + spacing
+            draw_text_with_effects((text_x, current_y), count_text, font_medium)
 
             
 
