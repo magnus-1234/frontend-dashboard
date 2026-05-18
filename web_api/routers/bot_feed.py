@@ -136,6 +136,35 @@ def _normalize_activity_event(doc: Dict[str, Any]) -> Dict[str, Any]:
     gift_code = doc.get("gift_code")
     old_value = doc.get("old_value")
     new_value = doc.get("new_value")
+
+    player = doc.get("nickname")
+    message = str(doc.get("message") or title)
+
+    # Fix case where player or message contains stringified dicts
+    if isinstance(player, str) and player.startswith("{") and "'nickname':" in player:
+        import ast
+        try:
+            p_dict = ast.literal_eval(player)
+            if isinstance(p_dict, dict) and "nickname" in p_dict:
+                player = p_dict["nickname"]
+        except Exception:
+            pass
+    elif isinstance(player, dict) and "nickname" in player:
+        player = player.get("nickname")
+
+    if message.startswith("{") and "'nickname':" in message:
+        import re, ast
+        match = re.match(r"^(\{.*?\})\s*(.*)", message)
+        if match:
+            try:
+                p_dict = ast.literal_eval(match.group(1))
+                if isinstance(p_dict, dict) and "nickname" in p_dict:
+                    message = f"{p_dict['nickname']} {match.group(2)}"
+                    if not player or isinstance(player, dict) or player.startswith("{"):
+                        player = p_dict["nickname"]
+            except Exception:
+                pass
+
     return {
         "id": str(doc.get("id") or f"activity-{workflow}-{event_type}-{timestamp}"),
         "type": type_key,
@@ -143,8 +172,8 @@ def _normalize_activity_event(doc: Dict[str, Any]) -> Dict[str, Any]:
         "event_type": event_type,
         "status": status,
         "title": title if title != "Avatar updated" else "",
-        "message": doc.get("message") or title,
-        "player": doc.get("nickname"),
+        "message": message,
+        "player": player,
         "fid": str(doc.get("fid") or ""),
         "state": doc.get("state_id"),
         "state_id": doc.get("state_id"),
