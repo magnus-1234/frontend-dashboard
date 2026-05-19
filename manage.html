@@ -2961,7 +2961,10 @@
                 
                 if(document.getElementById('stat-server-age')) document.getElementById('stat-server-age').textContent = stats.server_age || 'Unknown';
                 if(document.getElementById('stat-alliance')) document.getElementById('stat-alliance').textContent = stats.alliance_name || 'Not Set';
-                if(document.getElementById('stat-state')) document.getElementById('stat-state').textContent = stats.state || 'Not Set';
+                if(document.getElementById('stat-state')) {
+                    const st = stats.state;
+                    document.getElementById('stat-state').textContent = (st && st !== 'Not Set') ? (st.toString().startsWith('#') ? st : '#' + st) : 'Not Set';
+                }
                 if(document.getElementById('stat-active-reminders')) document.getElementById('stat-active-reminders').textContent = stats.active_reminders || 0;
                 
                 const updateBadge = (id, active) => {
@@ -2990,9 +2993,26 @@
                 if (!value) { showNotification('Alliance name is required', true); return; }
                 payload.alliance_name = value;
             } else if (type === 'state') {
-                const next = prompt('State number', currentState === 'Not Set' ? '' : currentState);
+                if (currentAlliance === 'Not Set' || !currentAlliance) {
+                    showNotification('Please configure an Alliance before setting the State.', true);
+                    return;
+                }
+                let defaultVal = currentState === 'Not Set' ? '' : currentState.trim();
+                if (defaultVal.startsWith('#')) {
+                    defaultVal = defaultVal.substring(1);
+                }
+                const next = prompt('State number', defaultVal);
                 if (next === null) return;
-                const value = parseInt(next, 10);
+                const cleaned = next.trim();
+                if (!cleaned) {
+                    showNotification('State number cannot be empty', true);
+                    return;
+                }
+                if (!/^\d+$/.test(cleaned)) {
+                    showNotification('Enter a valid state number (numbers only)', true);
+                    return;
+                }
+                const value = parseInt(cleaned, 10);
                 if (!value || value < 1) { showNotification('Enter a valid state number', true); return; }
                 payload.state = value;
             }
