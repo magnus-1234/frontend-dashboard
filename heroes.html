@@ -14,7 +14,7 @@
   <meta name="description" content="Explore all Whiteout Survival heroes with detailed information">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;800&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <style>
@@ -62,15 +62,137 @@
     }
 
     [data-theme="cartoon"] {
-      --radius: 18px;
-      --bg-dark: #f6fbff;
-      --card-bg: rgba(255, 255, 255, 0.92);
-      --glass-border: rgba(23, 32, 51, 0.14);
-      --text-main: #172033;
-      --text-muted: #5b6478;
-      --primary: #ff5f8f;
-      --primary-glow: rgba(0, 184, 217, 0.35);
-      --gradient-brand: linear-gradient(135deg, #172033 0%, #ff5f8f 45%, #00a7c7 100%);
+      --radius: 8px;
+      --bg-dark: #FAF8F2;
+      --card-bg: #ffffff;
+      --glass-border: #191919;
+      --text-main: #191919;
+      --text-muted: #5a5a5a;
+      --primary: #F75C82;
+      --primary-glow: #FAF8F2;
+      --gradient-brand: linear-gradient(135deg, #191919 0%, #F75C82 100%);
+    }
+
+    [data-theme="cartoon"] body {
+      background-color: #FAF8F2 !important;
+      background-image: 
+        radial-gradient(circle at 80% 20%, rgba(253, 223, 60, 0.15) 0%, transparent 40%),
+        radial-gradient(circle at 20% 80%, rgba(247, 92, 130, 0.1) 0%, transparent 40%) !important;
+      font-family: "Lora", Georgia, serif !important;
+    }
+
+    [data-theme="cartoon"] h1,
+    [data-theme="cartoon"] h2,
+    [data-theme="cartoon"] h3,
+    [data-theme="cartoon"] h4,
+    [data-theme="cartoon"] h5,
+    [data-theme="cartoon"] h6,
+    [data-theme="cartoon"] .brand-text,
+    [data-theme="cartoon"] .page-header h1,
+    [data-theme="cartoon"] .hero-name {
+      font-family: 'Newsreader', 'Lora', Georgia, serif !important;
+      font-weight: 800 !important;
+      letter-spacing: -0.02em !important;
+      color: #191919 !important;
+    }
+
+    [data-theme="cartoon"] header {
+      border-bottom: 2px solid #191919 !important;
+      background: #FDDF3C !important;
+      box-shadow: none !important;
+    }
+
+    [data-theme="cartoon"] header a,
+    [data-theme="cartoon"] header span,
+    [data-theme="cartoon"] header div,
+    [data-theme="cartoon"] header button {
+      color: #191919 !important;
+    }
+
+    [data-theme="cartoon"] .btn,
+    [data-theme="cartoon"] button,
+    [data-theme="cartoon"] .theme-toggle,
+    [data-theme="cartoon"] .filter-btn {
+      border: 1.5px solid #191919 !important;
+      background: #F75C82 !important;
+      color: #191919 !important;
+      box-shadow: 3px 3px 0px #191919 !important;
+      border-radius: 8px !important;
+      text-shadow: none !important;
+      transition: transform 0.15s ease, box-shadow 0.15s ease !important;
+    }
+
+    [data-theme="cartoon"] .btn:hover,
+    [data-theme="cartoon"] button:hover,
+    [data-theme="cartoon"] .theme-toggle:hover,
+    [data-theme="cartoon"] .filter-btn:hover {
+      transform: translate(-2px, -2px) !important;
+      box-shadow: 5px 5px 0px #191919 !important;
+      background: #f87293 !important;
+    }
+
+    [data-theme="cartoon"] .btn:active,
+    [data-theme="cartoon"] button:active,
+    [data-theme="cartoon"] .theme-toggle:active,
+    [data-theme="cartoon"] .filter-btn:active {
+      transform: translate(0px, 0px) !important;
+      box-shadow: 2px 2px 0px #191919 !important;
+    }
+
+    [data-theme="cartoon"] .filter-btn {
+      background: #ffffff !important;
+      color: #191919 !important;
+      box-shadow: 2px 2px 0px #191919 !important;
+    }
+
+    [data-theme="cartoon"] .filter-btn.active {
+      background: #FDDF3C !important;
+      box-shadow: 3px 3px 0px #191919 !important;
+    }
+
+    [data-theme="cartoon"] .theme-toggle {
+      background: #ffffff !important;
+      box-shadow: 2px 2px 0px #191919 !important;
+    }
+
+    [data-theme="cartoon"] .theme-toggle:hover {
+      background: #FAF8F2 !important;
+    }
+
+    [data-theme="cartoon"] .hero-card {
+      border: 1.5px solid #191919 !important;
+      background: #ffffff !important;
+      color: #191919 !important;
+      box-shadow: 4px 4px 0px #191919 !important;
+      border-radius: 8px !important;
+      backdrop-filter: none !important;
+      transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+    }
+
+    [data-theme="cartoon"] .hero-card:hover {
+      transform: translate(-4px, -4px) !important;
+      box-shadow: 8px 8px 0px #191919 !important;
+      border-color: #191919 !important;
+    }
+
+    [data-theme="cartoon"] .hero-icon {
+      border: 2px solid #191919 !important;
+      border-radius: 8px !important;
+      box-shadow: 2px 2px 0px #191919 !important;
+    }
+
+    [data-theme="cartoon"] .hero-rarity {
+      color: #5a5a5a !important;
+    }
+
+    [data-theme="cartoon"] .page-header p {
+      color: #3d3d3d !important;
+    }
+
+    [data-theme="cartoon"] footer {
+      background: #FAF8F2 !important;
+      color: #191919 !important;
+      border-top: 1.5px solid #191919 !important;
     }
 
     * {
