@@ -3439,46 +3439,76 @@
         if (sysLatency) sysLatency.textContent = "Unavailable";
       });
 
-      fetch("https://ipapi.co/json/")
-        .then(res => res.json())
-        .then(data => {
-          if (sysIp) sysIp.textContent = data.ip || "Unavailable";
-          if (sysRegion) sysRegion.textContent = data.region && data.country ? `${data.region}, ${data.country}` : "Unknown";
-          if (sysIsp) sysIsp.textContent = data.org || "Unknown";
+      const fetchJsonWithTimeout = async (url, timeout = 3500) => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeout);
+        try {
+          const response = await fetch(url, { signal: controller.signal, cache: "no-store" });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return await response.json();
+        } finally {
+          clearTimeout(timer);
+        }
+      };
 
-          // VPN Detection Logic
-          const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-          const ipTz = data.timezone;
-          const org = (data.org || "").toLowerCase();
-          const vpnKeywords = ["vpn", "proxy", "hosting", "server", "mullvad", "nordvpn", "expressvpn", "surfshark", "proton", "tunnelbear", "m247", "leaseweb", "digitalocean", "linode", "ovh", "vultr", "aws", "amazon", "google cloud", "cloudflare", "fastly", "akamai", "asn", "datacenter", "tor exit", "private internet", "ipvanish", "vyprvpn", "strongvpn"];
+      const normalizeIpData = data => {
+        if (!data) return null;
+        if (data.success === false || data.error) return null;
 
-          let isVpn = false;
-          if (ipTz && localTz && ipTz.toLowerCase() !== localTz.toLowerCase()) {
-            isVpn = true;
+        return {
+          ip: data.ip || data.query || "",
+          region: data.region || data.regionName || "",
+          country: data.country || data.countryCode || data.country_code || "",
+          org: data.org || data.isp || data.connection?.org || data.connection?.isp || "",
+          timezone: data.timezone || data.time_zone?.id || "",
+          proxy: Boolean(data.proxy || data.security?.proxy || data.security?.vpn || data.security?.tor),
+        };
+      };
+
+      const loadConnectionDetails = async () => {
+        const providers = [
+          "https://ipapi.co/json/",
+          "https://ipwho.is/",
+          "https://ipinfo.io/json",
+        ];
+
+        for (const provider of providers) {
+          try {
+            const normalized = normalizeIpData(await fetchJsonWithTimeout(provider));
+            if (normalized?.ip) return normalized;
+          } catch (error) {
+            continue;
           }
-          if (vpnKeywords.some(kw => org.includes(kw))) {
-            isVpn = true;
-          }
+        }
+        return null;
+      };
 
+      loadConnectionDetails().then(data => {
+        if (!data) {
+          if (sysIp) sysIp.textContent = "Blocked";
+          if (sysRegion) sysRegion.textContent = "Private";
+          if (sysIsp) sysIsp.textContent = "Private";
           if (sysVpn) {
-            if (isVpn) {
-              sysVpn.textContent = "Detected";
-              sysVpn.className = "sys-value sys-pink";
-            } else {
-              sysVpn.textContent = "Not detected";
-              sysVpn.className = "sys-value sys-neon";
-            }
-          }
-        })
-        .catch(err => {
-          if (sysIp) sysIp.textContent = "Unavailable";
-          if (sysRegion) sysRegion.textContent = "Unavailable";
-          if (sysIsp) sysIsp.textContent = "Unavailable";
-          if (sysVpn) {
-            sysVpn.textContent = "Unavailable";
+            sysVpn.textContent = "Unknown";
             sysVpn.className = "sys-value";
           }
-        });
+          return;
+        }
+
+        if (sysIp) sysIp.textContent = data.ip || "Unknown";
+        if (sysRegion) sysRegion.textContent = data.region && data.country ? `${data.region}, ${data.country}` : data.country || "Unknown";
+        if (sysIsp) sysIsp.textContent = data.org || "Unknown";
+
+        const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const org = (data.org || "").toLowerCase();
+        const vpnKeywords = ["vpn", "proxy", "hosting", "mullvad", "nordvpn", "expressvpn", "surfshark", "proton", "tunnelbear", "m247", "leaseweb", "digitalocean", "linode", "ovh", "vultr", "aws", "amazon", "google cloud", "cloudflare", "fastly", "akamai", "datacenter", "tor exit", "private internet", "ipvanish", "vyprvpn", "strongvpn"];
+        const isVpn = data.proxy || Boolean(data.timezone && localTz && data.timezone.toLowerCase() !== localTz.toLowerCase()) || vpnKeywords.some(kw => org.includes(kw));
+
+        if (sysVpn) {
+          sysVpn.textContent = isVpn ? "Possible" : "Not detected";
+          sysVpn.className = isVpn ? "sys-value sys-pink" : "sys-value sys-neon";
+        }
+      });
     });
   </script>
 </body>
