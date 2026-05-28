@@ -1,4 +1,13 @@
 (function(){
+  function presetUrl(url) {
+    if (!url) return '';
+    try {
+      return new URL(url, window.location.origin).href;
+    } catch (e) {
+      return url;
+    }
+  }
+
   async function loadPresets() {
     try {
       const res = await fetch('/assets/presets/presets.json');
@@ -79,8 +88,8 @@
 
           const imageInput = document.querySelector('input[name="image_url"], input#image_url');
           const thumbInput = document.querySelector('input[name="thumbnail_url"], input#thumbnail_url');
-          if (imageInput) imageInput.value = p.image_url;
-          if (thumbInput) thumbInput.value = p.thumbnail_url || p.image_url;
+          if (imageInput) imageInput.value = presetUrl(p.image_url);
+          if (thumbInput) thumbInput.value = presetUrl(p.thumbnail_url || p.image_url);
 
           const preview = document.getElementById('preset-selection-preview');
           if (preview) { preview.src = p.image_url; preview.style.display = 'block'; }
@@ -118,8 +127,8 @@
     if (!form) return false;
     const imageInput = form.querySelector('input[name="image_url"], input#image_url');
     const thumbInput = form.querySelector('input[name="thumbnail_url"], input#thumbnail_url');
-    if (imageInput) imageInput.value = p.image_url;
-    if (thumbInput) thumbInput.value = p.thumbnail_url || p.image_url;
+    if (imageInput) imageInput.value = presetUrl(p.image_url);
+    if (thumbInput) thumbInput.value = presetUrl(p.thumbnail_url || p.image_url);
     return true;
   };
 })();

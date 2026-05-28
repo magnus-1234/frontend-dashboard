@@ -1,12 +1,21 @@
 const REMINDER_ASSETS = [
-    { name: "WOS", url: "https://cdn.discordapp.com/attachments/1435569370389807144/1507347649408532520/new-icon.png?ex=6a14de24&is=6a138ca4&hm=9af7a0382eeb6ef837b479ea36c4f0a54121c542c24ab221c515039cfd5521a5" },
-    { name: "Crazy Joe", url: "https://cdn.discordapp.com/attachments/1435569370389807144/1465697260829671687/images__7_-removebg-preview.png?ex=6a14f4b2&is=6a13a332&hm=ebe8ca159dd9a120fa5ff6b8a1095019e968155ec0523ad03790f1d6f93740cf" },
-    { name: "Arena", url: "https://cdn.discordapp.com/attachments/1435569370389807144/1438668192372490331/95eab350caae2ac1.png?ex=6a14d7aa&is=6a13862a&hm=267c2b44c7d5d4fe6ce35d8851253b625a07680fb533f9fa92bd790390ebe582" },
-    { name: "Sunfire Castle", url: "https://cdn.discordapp.com/attachments/1435569370389807144/1441753704867827954/e6e3d1fb5943666f.png?ex=6a14dc85&is=6a138b05&hm=8ba4980891151b8fb09702259b4adb2d625f480763f9e424e56c32a64c03467d" },
-    { name: "Bear Trap", url: "https://cdn.discordapp.com/attachments/1435569370389807144/1441474311834832956/0f4d6593f84ba519bd095f077527f9ec-8.gif?ex=6a1529d1&is=6a13d851&hm=fda361585a06804f9fe9da6461b362a11a6042aed90f532aac2d89dd0aece5d9" }
+    { name: "WOS", url: "/assets/presets/wos.png" },
+    { name: "Crazy Joe", url: "/assets/presets/crazy-joe.png" },
+    { name: "Arena", url: "/assets/presets/arena.png" },
+    { name: "Sunfire Castle", url: "/assets/presets/sunfire-castle.png" },
+    { name: "Bear Trap", url: "/assets/presets/bear-trap.gif" }
 ];
 
 let currentAssetTargetId = null;
+
+function reminderAssetUrl(url) {
+    if (!url) return "";
+    try {
+        return new URL(url, window.location.origin).href;
+    } catch (e) {
+        return url;
+    }
+}
 
 function initAssetLibrary() {
     // Inject styles
@@ -213,7 +222,7 @@ function selectAsset(url) {
     if (currentAssetTargetId) {
         const input = document.getElementById(currentAssetTargetId);
         if (input) {
-            input.value = url;
+            input.value = reminderAssetUrl(url);
             // Dispatch input event so any listeners (like updateReminderPreview) catch it
             input.dispatchEvent(new Event('input', { bubbles: true }));
         }
