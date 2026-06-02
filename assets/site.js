@@ -75,49 +75,70 @@
   }
 
   const hasDiscordToken = Boolean(localStorage.getItem("discord_access_token"));
-  document.querySelectorAll("[data-dashboard-link]").forEach((link) => {
+  const showDashboardLoader = (targetHref) => {
+    const loader = document.createElement("div");
+    loader.style.position = "fixed";
+    loader.style.inset = "0";
+    loader.style.background = "rgba(3, 7, 18, 0.9)";
+    loader.style.backdropFilter = "blur(12px)";
+    loader.style.zIndex = "9999";
+    loader.style.display = "flex";
+    loader.style.flexDirection = "column";
+    loader.style.alignItems = "center";
+    loader.style.justifyContent = "center";
+    loader.style.color = "#fff";
+    loader.style.fontFamily = "'Outfit', 'Plus Jakarta Sans', sans-serif";
+    loader.style.opacity = "0";
+    loader.style.transition = "opacity 0.3s ease";
+
+    loader.innerHTML = `
+      <div style="position: relative; width: 80px; height: 80px; margin-bottom: 24px;">
+        <div style="position: absolute; inset: 0; border: 4px solid rgba(99, 102, 241, 0.2); border-radius: 50%;"></div>
+        <div style="position: absolute; inset: 0; border: 4px solid #6366f1; border-radius: 50%; border-top-color: transparent; animation: spin 1s linear infinite;"></div>
+      </div>
+      <h2 style="font-size: 1.5rem; font-weight: 800; letter-spacing: -0.5px; background: linear-gradient(135deg, #fff 0%, #9ca3af 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-transform: uppercase;">
+        ${hasDiscordToken ? 'Loading Servers...' : 'Authenticating...'}
+      </h2>
+      <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+    `;
+
+    document.body.appendChild(loader);
+
+    requestAnimationFrame(() => {
+      loader.style.opacity = "1";
+    });
+
+    setTimeout(() => {
+      window.location.href = targetHref;
+    }, 450);
+  };
+
+  const wireDashboardLink = (link) => {
     link.setAttribute("href", hasDiscordToken ? "dashboard.html" : "login.html");
     link.addEventListener("click", (e) => {
       e.preventDefault();
       const targetHref = link.getAttribute("href");
-      
-      const loader = document.createElement("div");
-      loader.style.position = "fixed";
-      loader.style.inset = "0";
-      loader.style.background = "rgba(3, 7, 18, 0.9)";
-      loader.style.backdropFilter = "blur(12px)";
-      loader.style.zIndex = "9999";
-      loader.style.display = "flex";
-      loader.style.flexDirection = "column";
-      loader.style.alignItems = "center";
-      loader.style.justifyContent = "center";
-      loader.style.color = "#fff";
-      loader.style.fontFamily = "'Outfit', 'Plus Jakarta Sans', sans-serif";
-      loader.style.opacity = "0";
-      loader.style.transition = "opacity 0.3s ease";
-      
-      loader.innerHTML = `
-        <div style="position: relative; width: 80px; height: 80px; margin-bottom: 24px;">
-          <div style="position: absolute; inset: 0; border: 4px solid rgba(99, 102, 241, 0.2); border-radius: 50%;"></div>
-          <div style="position: absolute; inset: 0; border: 4px solid #6366f1; border-radius: 50%; border-top-color: transparent; animation: spin 1s linear infinite;"></div>
-        </div>
-        <h2 style="font-size: 1.5rem; font-weight: 800; letter-spacing: -0.5px; background: linear-gradient(135deg, #fff 0%, #9ca3af 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-transform: uppercase;">
-          ${hasDiscordToken ? 'Loading Servers...' : 'Authenticating...'}
-        </h2>
-        <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
-      `;
-      
-      document.body.appendChild(loader);
-      
-      requestAnimationFrame(() => {
-        loader.style.opacity = "1";
-      });
-      
-      setTimeout(() => {
-        window.location.href = targetHref;
-      }, 800);
+      showDashboardLoader(targetHref);
     });
-  });
+  };
+
+  document.querySelectorAll("[data-dashboard-link]").forEach(wireDashboardLink);
+
+  const shouldShowMobileDock = !document.body.classList.contains("chat-room-body") && !document.querySelector(".mobile-action-dock");
+  if (shouldShowMobileDock) {
+    const dock = document.createElement("nav");
+    dock.className = "mobile-action-dock";
+    dock.setAttribute("aria-label", "Mobile quick navigation");
+    dock.innerHTML = `
+      <a href="features.html" aria-label="Features">${icon("Sparkles")}<span>Features</span></a>
+      <a href="commands.html" aria-label="Commands">${icon("Activity")}<span>Commands</span></a>
+      <a href="chat.html" aria-label="Chat">${icon("Message")}<span>Chat</span></a>
+      <a href="${hasDiscordToken ? "dashboard.html" : "login.html"}" data-dashboard-link aria-label="Dashboard">${icon("Bot")}<span>Dashboard</span></a>
+    `;
+    document.body.appendChild(dock);
+    const dashboardDockLink = dock.querySelector("[data-dashboard-link]");
+    if (dashboardDockLink) wireDashboardLink(dashboardDockLink);
+  }
 
   const renderSiteAnnouncement = (message, announcementKey = "") => {
     let bar = document.querySelector("[data-site-announcement]");
