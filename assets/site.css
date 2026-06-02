@@ -8891,7 +8891,7 @@ body {
 
   .brand {
     min-width: 0;
-    max-width: min(42vw, 12rem);
+    max-width: min(34vw, 10rem);
   }
 
   .brand > span:last-child {
@@ -8903,8 +8903,8 @@ body {
   .header-actions {
     flex: 0 1 auto;
     min-width: 0;
-    max-width: 62vw;
-    gap: 0.4rem;
+    max-width: 68vw;
+    gap: 0.35rem;
     justify-content: flex-end;
   }
 
@@ -8912,63 +8912,53 @@ body {
   .header-actions .ghost-link {
     min-width: 0;
     max-width: 100%;
-    padding-inline: 0.52rem;
-    font-size: 0.72rem;
+    padding-inline: 0.72rem;
+    font-size: 0.74rem;
     white-space: nowrap;
   }
 
   .ghost-link.dashboard-cta {
-    display: inline-grid !important;
-    place-items: center;
-    flex: 0 0 2.72rem;
-    width: 2.72rem;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 5.9rem;
     height: 2.72rem;
-    padding: 0 !important;
-    color: transparent !important;
-    font-size: 0 !important;
+    color: rgba(255, 255, 255, 0.96) !important;
+    font-size: 0.72rem !important;
+    font-weight: 900;
+    letter-spacing: 0.02em;
+    line-height: 1 !important;
     overflow: hidden;
     position: relative;
+    text-transform: uppercase;
   }
 
   .header-actions a.ghost-link.dashboard-cta.nav-galaxy {
     border-radius: 0.9rem !important;
-    color: transparent !important;
-    font-size: 0 !important;
-    line-height: 0 !important;
-    text-indent: -999rem;
+    color: rgba(255, 255, 255, 0.96) !important;
+    font-size: 0.72rem !important;
+    line-height: 1 !important;
+    text-indent: 0;
   }
 
   .header-actions a.ghost-link.dashboard-cta.nav-galaxy::before {
-    content: none !important;
+    opacity: 0.35 !important;
     animation: none !important;
   }
 
   .header-actions a.ghost-link.dashboard-cta.nav-galaxy::after {
-    content: "";
-    position: static;
-    inset: auto;
-    display: block;
-    width: 1.1rem;
-    height: 1.1rem;
-    border: 2px solid currentColor;
-    border-radius: 0.22rem;
-    color: #fff;
-    background:
-      linear-gradient(currentColor 0 0) 50% 0 / 2px 100% no-repeat,
-      linear-gradient(currentColor 0 0) 0 50% / 100% 2px no-repeat;
-    box-shadow: 0 0 18px rgba(141, 232, 255, 0.4);
-    text-indent: 0;
-    transform: none !important;
-    opacity: 1 !important;
+    content: none !important;
   }
 
   .header-actions .theme-toggle,
   .header-actions .wos-language-button {
-    flex: 0 0 2.72rem;
-    width: 2.72rem;
-    height: 2.72rem;
-    min-width: 2.72rem;
-    min-height: 2.72rem;
+    flex: 0 0 2.45rem;
+    width: 2.45rem;
+    height: 2.45rem;
+    min-width: 2.45rem;
+    min-height: 2.45rem;
     padding: 0 !important;
   }
 
