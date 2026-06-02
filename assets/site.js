@@ -210,7 +210,7 @@
       let lastError;
       for (const url of statusUrls) {
         try {
-          const response = await fetch(url, { headers: { Accept: "application/json" } });
+          const response = await fetch(url, { headers: { Accept: "application/json" }, cache: "no-store" });
           const contentType = response.headers.get("content-type") || "";
           if (!response.ok || !contentType.includes("application/json")) throw new Error("Status unavailable");
           return await response.json();
@@ -493,7 +493,7 @@
       let lastError;
       for (const url of urls) {
         try {
-          const response = await fetch(url, { headers: { Accept: "application/json" } });
+          const response = await fetch(url, { headers: { Accept: "application/json" }, cache: "no-store" });
           const contentType = response.headers.get("content-type") || "";
           if (!response.ok || !contentType.includes("application/json")) {
             throw new Error("API unavailable");
