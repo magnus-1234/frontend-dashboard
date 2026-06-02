@@ -435,8 +435,10 @@
     };
     let feedSyncing = false;
     const feedUrls = ["/api/bot-feed?limit=60"];
+    const giftCodeUrls = ["/api/giftcodes"];
     if (["127.0.0.1", "localhost", "::1"].includes(window.location.hostname)) {
       feedUrls.push("http://140.245.241.54:8080/api/bot-feed?limit=60");
+      giftCodeUrls.push("http://140.245.241.54:8080/api/giftcodes");
     }
     const fetchBotFeed = async () => {
       let lastError;
@@ -454,6 +456,30 @@
       }
       throw lastError || new Error("Feed unavailable");
     };
+    const isActiveGiftCode = (item) => {
+      if (!item || !item.code) return false;
+      if (item.is_active === false) return false;
+      const status = String(item.status || item.validation_status || "active").trim().toLowerCase();
+      return status === "active" || status === "valid" || status === "validated";
+    };
+    const fetchActiveGiftCodeCount = async () => {
+      let lastError;
+      for (const url of giftCodeUrls) {
+        try {
+          const response = await fetch(url, { headers: { Accept: "application/json" }, cache: "no-store" });
+          const contentType = response.headers.get("content-type") || "";
+          if (!response.ok || !contentType.includes("application/json")) {
+            throw new Error("Gift codes unavailable");
+          }
+          const payload = await response.json();
+          const codes = Array.isArray(payload?.codes) ? payload.codes : (Array.isArray(payload) ? payload : []);
+          return codes.filter(isActiveGiftCode).length;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      throw lastError || new Error("Gift codes unavailable");
+    };
     const syncFeed = () => {
       if (feedSyncing) return;
       feedSyncing = true;
@@ -462,7 +488,7 @@
         els.refresh.textContent = "Syncing";
       }
       fetchBotFeed()
-        .then((feed) => {
+        .then(async (feed) => {
           feedEvents = Array.isArray(feed.events) && feed.events.length ? feed.events : idleEvents;
           feedIndex = 0;
           renderQueue();
@@ -470,7 +496,11 @@
           setMetric("members", feed.summary?.monitored_members || 0);
           setMetric("monitors", feed.summary?.active_monitors || 0);
           setMetric("redeem", feed.summary?.auto_redeem_servers || 0);
-          setMetric("codes", feed.summary?.active_gift_codes || 0);
+          try {
+            setMetric("codes", await fetchActiveGiftCodeCount());
+          } catch (error) {
+            setMetric("codes", feed.summary?.active_gift_codes || 0);
+          }
           const statusLabel = feed.status === "redeeming" ? "redeeming" : (feed.status === "queued" ? "queued" : (feed.status || "online"));
           // Determine visual state: LIVE (live flag set) vs RECENT (events exist but no live) vs IDLE
           const hasRecentEvents = Array.isArray(feed.events) && feed.events.length > 0;
