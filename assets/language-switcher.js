@@ -273,6 +273,10 @@
       }
 
       @media (max-width: 640px) {
+        .wos-language-switcher {
+          z-index: 2000;
+        }
+
         .wos-language-button {
           min-width: 2.72rem;
           min-height: 2.72rem;
@@ -281,6 +285,17 @@
 
         .wos-language-current {
           display: none;
+        }
+
+        .wos-language-menu {
+          position: fixed;
+          top: 4.35rem;
+          left: 0.75rem;
+          right: 0.75rem;
+          width: auto;
+          max-width: calc(100vw - 1.5rem);
+          max-height: min(65vh, 28rem);
+          transform-origin: top right;
         }
       }
     `;

@@ -854,6 +854,167 @@
       #profile-name { font-size: 2em; }
     }
 
+    @media (max-width: 640px) {
+      header {
+        padding: 10px 12px;
+        gap: 10px;
+      }
+
+      .brand {
+        min-width: 0;
+        gap: 10px;
+      }
+
+      .brand img {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        flex: 0 0 auto;
+      }
+
+      .brand-text {
+        max-width: 42vw;
+        font-size: 1rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .account-area {
+        gap: 8px;
+        min-width: 0;
+        flex: 1 1 auto;
+        justify-content: flex-end;
+        overflow: hidden;
+      }
+
+      .account-area > .btn:not(.danger) {
+        display: none;
+      }
+
+      #user-container {
+        flex: 0 1 auto;
+        min-width: 0;
+        max-width: 96px;
+        padding: 3px;
+        overflow: hidden;
+      }
+
+      .user-name-small {
+        display: none;
+      }
+
+      .small-avatar {
+        margin-left: 0;
+      }
+
+      #user-container .btn.danger {
+        width: 38px;
+        height: 38px;
+        margin-left: 6px !important;
+        padding: 0 !important;
+      }
+
+      main {
+        padding: 24px 12px 88px;
+      }
+
+      .user-profile {
+        gap: 18px;
+        margin-bottom: 28px;
+        padding: 22px 16px;
+        text-align: left;
+        align-items: flex-start;
+      }
+
+      .avatar {
+        width: 86px;
+        height: 86px;
+        border-radius: 22px;
+      }
+
+      .profile-right {
+        width: 100%;
+        align-items: stretch;
+        gap: 18px;
+      }
+
+      #profile-name {
+        font-size: clamp(1.55rem, 8vw, 2rem);
+        overflow-wrap: anywhere;
+      }
+
+      .profile-meta {
+        flex-wrap: wrap;
+        gap: 6px;
+        overflow-wrap: anywhere;
+      }
+
+      .profile-cta {
+        width: 100%;
+        min-width: 0;
+      }
+
+      .section-header {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 10px;
+        margin-bottom: 18px;
+      }
+
+      .section-title {
+        font-size: 1.45rem;
+      }
+
+      .servers-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+
+      .server-banner {
+        height: 92px;
+      }
+
+      .server-icon {
+        top: 58px;
+        left: 18px;
+        width: 68px;
+        height: 68px;
+        border-width: 5px;
+        border-radius: 18px;
+      }
+
+      .server-body {
+        padding: 46px 18px 18px;
+      }
+
+      .server-card {
+        border-radius: 14px;
+      }
+
+      .live-bot-widget {
+        right: 12px !important;
+        bottom: 12px !important;
+        width: calc(100vw - 24px);
+        max-height: min(42vh, 260px);
+        padding: 12px;
+      }
+
+      .live-bot-widget-content {
+        max-height: 150px;
+      }
+
+      footer {
+        padding: 32px 14px !important;
+      }
+
+      footer .brand {
+        font-size: 1.25rem !important;
+        justify-content: center;
+        text-align: center;
+      }
+    }
+
     /* Live Bot Processing Widget */
     .live-bot-widget {
       position: fixed;

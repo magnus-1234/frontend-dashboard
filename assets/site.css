@@ -8713,11 +8713,53 @@ body {
   }
 
   .chat-room-shell {
-    grid-template-columns: minmax(17rem, 0.34fr) minmax(0, 1fr) !important;
+    grid-template-columns: 1fr !important;
+    height: auto;
+    min-height: calc(100vh - 6rem);
+  }
+
+  .chat-session-panel {
+    display: none;
   }
 }
 
 @media (max-width: 640px) {
+  html,
+  body {
+    overflow-x: hidden;
+  }
+
+  .header-inner {
+    gap: 0.5rem;
+  }
+
+  .global-chat-shell {
+    right: 0.75rem !important;
+    bottom: 0.75rem !important;
+  }
+
+  .global-chat-panel,
+  .tenor-panel {
+    width: calc(100vw - 1.5rem) !important;
+    max-width: none !important;
+  }
+
+  .chat-room-page {
+    padding: 0.5rem;
+  }
+
+  .chat-room-main {
+    min-height: calc(100vh - 7rem);
+  }
+
+  .chat-room-form,
+  .global-chat-form,
+  .room-login,
+  .chat-login-row,
+  .chat-announcement-compose {
+    grid-template-columns: 1fr !important;
+  }
+
   .chat-login-tabs {
     grid-template-columns: 1fr 1fr 1fr;
   }
@@ -8727,12 +8769,21 @@ body {
     height: 2rem;
   }
 
-  .tenor-panel {
-    width: calc(100vw - 2rem) !important;
-  }
-
   .tenor-results {
     grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .chat-room-topbar,
+  .chat-room-user,
+  .room-composer-actions {
+    flex-wrap: wrap;
+  }
+
+  .chat-send-button,
+  .chat-login-btn,
+  .chat-connect-wos,
+  .chat-announcement-compose button {
+    width: 100%;
   }
 }
 
@@ -8816,4 +8867,141 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Final narrow-screen guardrails for shared public pages and chat. */
+@media (max-width: 640px) {
+  html,
+  body {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .site-header,
+  .main-content,
+  .site-footer,
+  .container {
+    max-width: 100vw;
+  }
+
+  .header-inner {
+    min-width: 0;
+    gap: 0.45rem;
+  }
+
+  .brand {
+    min-width: 0;
+    max-width: min(42vw, 12rem);
+  }
+
+  .brand > span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .header-actions {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 58vw;
+    gap: 0.35rem;
+    justify-content: flex-end;
+  }
+
+  .ghost-link.dashboard-cta,
+  .header-actions .ghost-link {
+    min-width: 0;
+    max-width: 100%;
+    padding-inline: 0.52rem;
+    font-size: 0.72rem;
+    white-space: nowrap;
+  }
+
+  .ghost-link.dashboard-cta {
+    display: none !important;
+  }
+
+  .header-actions .wos-language-widget {
+    flex: 0 0 auto;
+  }
+
+  .wos-language-menu {
+    position: fixed !important;
+    top: 4.35rem !important;
+    left: 0.625rem !important;
+    right: 0.625rem !important;
+    width: auto !important;
+    max-width: calc(100vw - 1.25rem) !important;
+  }
+
+  .feature-grid,
+  .feature-grid:has(.feature-card-3d),
+  .stats-grid,
+  .operation-grid,
+  .commands-layout {
+    display: grid !important;
+    grid-auto-flow: row !important;
+    grid-auto-columns: auto !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: visible !important;
+    scroll-snap-type: none !important;
+  }
+
+  .feature-card,
+  .feature-card-3d,
+  [data-theme="cyberpunk-cool"] .feature-card-3d {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    transform: none !important;
+  }
+
+  .feature-card h3,
+  .feature-card p,
+  .feature-card-3d h3,
+  .feature-card-3d p {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .footer-brand {
+    max-width: 100%;
+    justify-content: flex-start;
+  }
+
+  .footer-brand span:last-child,
+  .site-footer p {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .chat-room-body .chat-room-topbar {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    align-items: stretch !important;
+  }
+
+  .chat-room-body .chat-active-room,
+  .chat-room-body .chat-search-wrap,
+  .chat-room-body .chat-search-input,
+  .chat-room-body .chat-header-actions {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .chat-room-body .chat-header-actions {
+    display: flex !important;
+    justify-content: flex-start !important;
+    overflow-x: auto;
+    padding-bottom: 0.15rem;
+  }
+
+  .chat-room-body .chat-icon-button {
+    flex: 0 0 2.5rem;
+  }
 }

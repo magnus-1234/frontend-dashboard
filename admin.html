@@ -509,6 +509,117 @@
       .stats, .form-grid { grid-template-columns: 1fr; }
       h1 { font-size: 1.55rem; }
     }
+
+    @media (max-width: 640px) {
+      body {
+        overflow-x: hidden;
+      }
+
+      header {
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 12px;
+        gap: 12px;
+      }
+
+      header > div {
+        width: 100%;
+        justify-content: space-between;
+        flex-wrap: wrap;
+      }
+
+      .brand {
+        min-width: 0;
+      }
+
+      .brand strong {
+        font-size: 1rem;
+      }
+
+      .shell {
+        width: min(100% - 20px, 1480px);
+        margin: 12px auto 40px;
+      }
+
+      .hero-main,
+      .section,
+      .stats {
+        padding: 14px;
+      }
+
+      .actions,
+      .toolbar,
+      .row-actions,
+      .section-head,
+      .checks {
+        align-items: stretch;
+        width: 100%;
+      }
+
+      .actions .btn,
+      .row-actions .btn,
+      .toolbar select,
+      .search {
+        width: 100%;
+        max-width: none !important;
+      }
+
+      .btn,
+      input,
+      select,
+      textarea {
+        min-height: 44px;
+      }
+
+      .search {
+        min-width: 0;
+      }
+
+      .server-list {
+        max-height: none;
+        overflow: visible;
+        padding-right: 0;
+      }
+
+      .server-row,
+      .table-row,
+      .chat-message-row {
+        grid-template-columns: 40px minmax(0, 1fr);
+        align-items: start;
+      }
+
+      .table-row,
+      .chat-message-row {
+        grid-template-columns: 1fr;
+      }
+
+      .server-row .row-actions {
+        grid-column: 1 / -1;
+        justify-content: stretch;
+      }
+
+      .server-meta {
+        gap: 6px;
+      }
+
+      .pill {
+        max-width: 100%;
+        overflow-wrap: anywhere;
+      }
+
+      .stats {
+        gap: 8px;
+      }
+
+      .stat {
+        padding: 14px;
+      }
+
+      .stat b {
+        font-size: 1.35rem;
+        overflow-wrap: anywhere;
+      }
+    }
   </style>
 </head>
 <body>
