@@ -202,11 +202,25 @@
       if (hours > 0) return `${hours}h ${minutes}m`;
       return `${Math.max(1, minutes)}m`;
     };
-    fetch("/api/status", { headers: { Accept: "application/json" } })
-      .then((response) => {
-        if (!response.ok) throw new Error("Status unavailable");
-        return response.json();
-      })
+    const statusUrls = ["/api/status"];
+    if (["127.0.0.1", "localhost", "::1"].includes(window.location.hostname)) {
+      statusUrls.push("http://140.245.241.54:8080/api/status");
+    }
+    const fetchStatus = async () => {
+      let lastError;
+      for (const url of statusUrls) {
+        try {
+          const response = await fetch(url, { headers: { Accept: "application/json" } });
+          const contentType = response.headers.get("content-type") || "";
+          if (!response.ok || !contentType.includes("application/json")) throw new Error("Status unavailable");
+          return await response.json();
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      throw lastError || new Error("Status unavailable");
+    };
+    fetchStatus()
       .then((status) => {
         setStat("servers", compactNumber(status.servers_count ?? status.guilds_count));
         setStat("uptime", formatUptime(status.uptime_seconds));
@@ -274,8 +288,22 @@
       if (number >= 1000) return `${(number / 1000).toFixed(number >= 10000 ? 0 : 1)}K`;
       return String(number);
     };
+    const firstNumber = (...values) => {
+      for (const value of values) {
+        if (value !== null && value !== undefined && value !== "" && !Number.isNaN(Number(value))) {
+          return Number(value);
+        }
+      }
+      return 0;
+    };
     const setMetric = (name, value) => {
       document.querySelectorAll(`[data-feed-metric="${name}"]`).forEach((node) => {
+        node.textContent = compactNumber(value);
+      });
+    };
+    const setActiveCodeCount = (value) => {
+      setMetric("codes", value);
+      document.querySelectorAll("[data-active-code-check-count]").forEach((node) => {
         node.textContent = compactNumber(value);
       });
     };
@@ -461,22 +489,23 @@
       feedUrls.push("http://140.245.241.54:8080/api/bot-feed?limit=60");
       giftCodeUrls.push("http://140.245.241.54:8080/api/giftcodes");
     }
-    const fetchBotFeed = async () => {
+    const fetchJsonFrom = async (urls) => {
       let lastError;
-      for (const url of feedUrls) {
+      for (const url of urls) {
         try {
           const response = await fetch(url, { headers: { Accept: "application/json" } });
           const contentType = response.headers.get("content-type") || "";
           if (!response.ok || !contentType.includes("application/json")) {
-            throw new Error("Feed unavailable");
+            throw new Error("API unavailable");
           }
           return await response.json();
         } catch (error) {
           lastError = error;
         }
       }
-      throw lastError || new Error("Feed unavailable");
+      throw lastError || new Error("API unavailable");
     };
+    const fetchBotFeed = () => fetchJsonFrom(feedUrls);
     const isActiveGiftCode = (item) => {
       if (!item || !item.code) return false;
       if (item.is_active === false) return false;
@@ -514,13 +543,13 @@
           feedIndex = 0;
           renderQueue();
           renderServers(feed.servers || []);
-          setMetric("members", feed.summary?.monitored_members || 0);
-          setMetric("monitors", feed.summary?.active_monitors || 0);
-          setMetric("redeem", feed.summary?.auto_redeem_servers || 0);
+          setMetric("members", firstNumber(feed.summary?.monitored_members, feed.summary?.members, feed.monitored_members));
+          setMetric("monitors", firstNumber(feed.summary?.active_monitors, feed.summary?.alliance_monitor_active_scans, feed.active_monitors));
+          setMetric("redeem", firstNumber(feed.summary?.auto_redeem_servers, feed.summary?.redeem_servers, feed.auto_redeem_servers));
           try {
-            setMetric("codes", await fetchActiveGiftCodeCount());
+            setActiveCodeCount(await fetchActiveGiftCodeCount());
           } catch (error) {
-            setMetric("codes", feed.summary?.active_gift_codes || 0);
+            setActiveCodeCount(firstNumber(feed.summary?.active_gift_codes, feed.active_gift_codes));
           }
           const statusLabel = feed.status === "redeeming" ? "redeeming" : (feed.status === "queued" ? "queued" : (feed.status || "online"));
           // Determine visual state: LIVE (live flag set) vs RECENT (events exist but no live) vs IDLE
@@ -559,7 +588,7 @@
           setMetric("members", 0);
           setMetric("monitors", 0);
           setMetric("redeem", 0);
-          setMetric("codes", 0);
+          setActiveCodeCount(0);
           if (els.state) {
             els.state.textContent = "standby";
             els.state.classList.remove("recent", "idle");
