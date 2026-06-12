@@ -620,6 +620,87 @@
         overflow-wrap: anywhere;
       }
     }
+  
+    /* --- NEW TAB & MODAL STYLES --- */
+    .tabs-nav {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 10px;
+      overflow-x: auto;
+    }
+    .tab-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      font-weight: 700;
+      padding: 10px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+      white-space: nowrap;
+    }
+    .tab-btn:hover {
+      background: rgba(255,255,255,0.05);
+      color: var(--text);
+    }
+    .tab-btn.active {
+      background: var(--primary);
+      color: #fff;
+    }
+    .tab-pane {
+      display: none;
+      animation: fadeIn 0.3s ease;
+    }
+    .tab-pane.active {
+      display: block;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    /* MODAL STYLES */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(5px);
+      z-index: 100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    .modal-overlay.active {
+      display: flex;
+      opacity: 1;
+    }
+    .modal-box {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 24px;
+      width: 90%;
+      max-width: 400px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      text-align: center;
+      transform: scale(0.95);
+      transition: transform 0.2s ease;
+    }
+    .modal-overlay.active .modal-box {
+      transform: scale(1);
+    }
+    .modal-box h3 { margin-top: 0; font-family: Outfit, Inter, sans-serif; font-size: 1.4rem; color: var(--text); }
+    .modal-box p { margin-bottom: 24px; color: var(--muted); line-height: 1.5; }
+    .modal-actions { display: flex; gap: 12px; justify-content: center; }
+
   </style>
 </head>
 <body>
@@ -639,7 +720,7 @@
         <svg class="cyberpunk-cool-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
       <div class="actions" style="margin:0;">
-        <a class="btn" href="dashboard.html"><i data-lucide="layout-dashboard"></i> Dashboard</a>
+        <a class="btn primary" href="dashboard.html" style="background: rgba(255,255,255,0.08); color: var(--text); border-color: rgba(255,255,255,0.2);"><i data-lucide="chevron-left"></i> Back to Dashboard</a>
         <button class="btn danger" onclick="logout()"><i data-lucide="log-out"></i> Logout</button>
       </div>
     </div>
@@ -664,7 +745,16 @@
       </div>
     </section>
 
-    <section class="panel toolbar">
+    
+    <div class="tabs-nav">
+      <button class="tab-btn active" onclick="switchTab('tab-servers')"><i data-lucide="server"></i> Server Management</button>
+      <button class="tab-btn" onclick="switchTab('tab-registrations')"><i data-lucide="clipboard-check"></i> Registrations</button>
+      <button class="tab-btn" onclick="switchTab('tab-chat')"><i data-lucide="message-square"></i> Community Chat</button>
+      <button class="tab-btn" onclick="switchTab('tab-admins')"><i data-lucide="shield"></i> Administrators</button>
+    </div>
+    <div id="tab-servers" class="tab-pane active">
+      <section class="panel toolbar">
+
       <div class="search">
         <i data-lucide="search"></i>
         <input id="server-search" type="search" placeholder="Search servers by name or ID" oninput="renderServers()">
@@ -727,7 +817,7 @@
           <div class="actions" id="feature-links"></div>
         </div>
 
-        <div class="panel section" id="registrations">
+        </div></div><div id="tab-registrations" class="tab-pane"><section class="grid"><div class="panel section" id="registrations">
           <div class="section-head">
             <h2>Registration Review</h2>
             <span class="muted" id="pending-count">-</span>
@@ -755,7 +845,7 @@
           <div class="table" id="registration-limit-list" style="margin-top:14px;"></div>
         </div>
 
-        <div class="panel section" id="community-chat-admin">
+        </div></section></div><div id="tab-chat" class="tab-pane"><div class="panel section" id="community-chat-admin">
           <div class="section-head">
             <h2>Community Chat Control</h2>
             <span class="muted" id="chat-admin-status">Loading...</span>
@@ -792,7 +882,7 @@
           </div>
         </div>
 
-        <div class="panel section">
+        </div></div><div id="tab-admins" class="tab-pane"><section class="grid"><div class="panel section">
           <div class="section-head">
             <h2>Administrators</h2>
             <span class="muted" id="admin-count">-</span>
@@ -814,13 +904,45 @@
           <div class="table" id="admin-list" style="margin-top:14px;"></div>
         </div>
       </div>
-    </section>
+    </section></div>
   </main>
 
   <div class="toast" id="toast"></div>
 
   <script>
     const API_BASE = '';
+
+    // --- TAB SWITCHING ---
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+      
+      document.getElementById(tabId).classList.add('active');
+      document.querySelector(`[onclick="switchTab('${tabId}')"]`).classList.add('active');
+    }
+
+    // --- CUSTOM MODAL LOGIC ---
+    let modalConfirmCallback = null;
+    function openModal(title, desc, confirmBtnText, callback) {
+      document.getElementById('modal-title').textContent = title;
+      document.getElementById('modal-desc').textContent = desc;
+      const confirmBtn = document.getElementById('modal-confirm-btn');
+      confirmBtn.innerHTML = confirmBtnText;
+      
+      modalConfirmCallback = callback;
+      document.getElementById('custom-modal').classList.add('active');
+    }
+    
+    function closeModal() {
+      document.getElementById('custom-modal').classList.remove('active');
+      modalConfirmCallback = null;
+    }
+    
+    document.getElementById('modal-confirm-btn').addEventListener('click', () => {
+      if (modalConfirmCallback) modalConfirmCallback();
+      closeModal();
+    });
+
     const token = localStorage.getItem('discord_access_token');
     let state = { servers: [], admins: [], pending: [], registrationLimits: [], stats: {}, settingsCatalog: [], chatAdmin: null };
     let selectedGuildId = null;
@@ -1018,7 +1140,8 @@
     }
 
     async function resetSelectedLimits() {
-      if (!selectedGuildId || !confirm('Reset custom limits for this server?')) return;
+      if (!selectedGuildId) return;
+      openModal('Reset Limits', 'Are you sure you want to reset custom limits for this server?', '<i data-lucide=\"rotate-ccw\"></i> Reset', async () => {
       try {
         await api(`/api/admin/servers/${selectedGuildId}/limits`, { method: 'DELETE' });
         toast('Limits reset');
@@ -1026,6 +1149,7 @@
       } catch (err) {
         toast(err.message, true);
       }
+      });
     }
 
     async function saveSelectedLock() {
@@ -1132,7 +1256,7 @@
     }
 
     async function resetRegistrationLimit(userId) {
-      if (!confirm('Reset this user back to the default 1 server limit?')) return;
+      openModal('Reset Registration Limit', 'Reset this user back to the default 1 server limit?', '<i data-lucide=\"rotate-ccw\"></i> Reset', async () => {
       try {
         await api(`/api/admin/registration-limits/${userId}`, { method: 'DELETE' });
         toast('Registration limit reset');
@@ -1140,6 +1264,7 @@
       } catch (err) {
         toast(err.message, true);
       }
+      });
     }
 
     function formatChatTime(value) {
@@ -1287,7 +1412,7 @@
     }
 
     async function deleteChatMessage(messageId) {
-      if (!confirm('Delete this community chat message?')) return;
+      openModal('Delete Message', 'Are you sure you want to delete this community chat message?', '<i data-lucide=\"trash-2\"></i> Delete', async () => {
       try {
         await api(`/api/chat/messages/${encodeURIComponent(messageId)}`, { method: 'DELETE' });
         toast('Message deleted');
@@ -1295,10 +1420,11 @@
       } catch (err) {
         toast(err.message, true);
       }
+      });
     }
 
     async function clearChatMessages() {
-      if (!confirm('Clear all community chat messages?')) return;
+      openModal('Clear Chat', 'Are you sure you want to clear all community chat messages? This action cannot be undone.', '<i data-lucide=\"trash-2\"></i> Clear All', async () => {
       try {
         await api('/api/chat/admin/clear', { method: 'POST' });
         toast('Community chat cleared');
@@ -1306,6 +1432,7 @@
       } catch (err) {
         toast(err.message, true);
       }
+      });
     }
 
     function renderAdmins() {
@@ -1381,5 +1508,18 @@
     });
   </script>
   <script src="assets/language-switcher.js"></script>
+
+  <!-- CUSTOM MODAL -->
+  <div class="modal-overlay" id="custom-modal">
+    <div class="modal-box">
+      <h3 id="modal-title">Confirm Action</h3>
+      <p id="modal-desc">Are you sure you want to proceed?</p>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn danger" id="modal-confirm-btn">Confirm</button>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>
