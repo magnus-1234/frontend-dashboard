@@ -975,9 +975,14 @@
       modalConfirmCallback = null;
     }
     
-    document.getElementById('modal-confirm-btn').addEventListener('click', () => {
-      if (modalConfirmCallback) modalConfirmCallback();
-      closeModal();
+    document.addEventListener('DOMContentLoaded', () => {
+      const confirmBtn = document.getElementById('modal-confirm-btn');
+      if (confirmBtn) {
+        confirmBtn.addEventListener('click', () => {
+          if (modalConfirmCallback) modalConfirmCallback();
+          closeModal();
+        });
+      }
     });
 
     const token = localStorage.getItem('discord_access_token');
