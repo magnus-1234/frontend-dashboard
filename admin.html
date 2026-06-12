@@ -715,7 +715,37 @@
         <svg class="moon-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <svg class="contrast-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke-width="2"/></svg>
         <svg class="hacker-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m18 16 4-4-4-4M6 8l-4 4 4 4M14.5 4l-5 16" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <svg class="cartoon-icon" vi
+        <svg class="cartoon-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke-width="2"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg class="aurora-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor"><path d="M2 8c4-4 6 4 10 0s6-4 10 0M2 13c4-4 6 4 10 0s6-4 10 0M2 18c4-4 6 4 10 0s6-4 10 0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg class="cyberpunk-cool-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="actions" style="margin:0;">
+        <a class="btn primary" href="dashboard.html" style="background: rgba(255,255,255,0.08); color: var(--text); border-color: rgba(255,255,255,0.2);"><i data-lucide="chevron-left"></i> Back to Dashboard</a>
+        <button class="btn danger" onclick="logout()"><i data-lucide="log-out"></i> Logout</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="hero">
+      <div class="panel hero-main">
+        <h1>Settings Control Center</h1>
+        <p>Global administrators can manage every server-level setting exposed in the web dashboard, plus the controls that only exist in the Discord <strong>/settings</strong> menu: bot locks, feature locks, auto-redeem limits, admin access, and registration approvals.</p>
+        <div class="actions">
+          <button class="btn primary" onclick="refreshAll()"><i data-lucide="refresh-cw"></i> Refresh</button>
+          <a class="btn" href="#servers"><i data-lucide="server"></i> Servers</a>
+          <a class="btn" href="#registrations"><i data-lucide="clipboard-check"></i> Registrations</a>
+        </div>
+      </div>
+      <div class="panel stats" id="stats">
+        <div class="stat"><b>-</b><span>Servers</span></div>
+        <div class="stat"><b>-</b><span>Members</span></div>
+        <div class="stat"><b>-</b><span>Custom limits</span></div>
+        <div class="stat"><b>-</b><span>Pending reviews</span></div>
+      </div>
+    </section>
+
+    
     <div class="tabs-nav">
       <button class="tab-btn active" onclick="switchTab('tab-servers')"><i data-lucide="server"></i> Server Management</button>
       <button class="tab-btn" onclick="switchTab('tab-registrations')"><i data-lucide="clipboard-check"></i> Registrations</button>
@@ -903,53 +933,7 @@
       </section>
     </div>
 
-ick="clearChatAnnouncement()"><i data-lucide="eraser"></i> Clear Strip</button>
-              <button class="btn" id="chat-freeze-btn" onclick="toggleChatFreeze()"><i data-lucide="snowflake"></i> Toggle Pause</button>
-            </div>
-            <div class="form-grid">
-              <label>Player or Discord ID
-                <input id="chat-ban-user-id" inputmode="text" placeholder="User ID to ban or unban">
-              </label>
-              <label>Moderation
-                <select id="chat-ban-action">
-                  <option value="ban">Ban from community chat</option>
-                  <option value="unban">Unban from community chat</option>
-                </select>
-              </label>
-            </div>
-            <div class="actions">
-              <button class="btn danger" onclick="saveChatBan()"><i data-lucide="ban"></i> Apply Moderation</button>
-              <button class="btn" onclick="loadChatAdmin()"><i data-lucide="refresh-cw"></i> Refresh Chat</button>
-              <button class="btn danger" onclick="clearChatMessages()"><i data-lucide="trash-2"></i> Clear All Messages</button>
-            </div>
-            <div class="stats" style="padding:0;" id="chat-admin-stats"></div>
-            <div class="table" id="chat-message-list"></div>
-          </div>
-        </div>
 
-        <div class="panel section">
-          <div class="section-head">
-            <h2>Administrators</h2>
-            <span class="muted" id="admin-count">-</span>
-          </div>
-          <div class="form-grid">
-            <label>Discord user ID
-              <input id="admin-user-id" inputmode="numeric" placeholder="123456789012345678">
-            </label>
-            <label>Access level
-              <select id="admin-global">
-                <option value="false">Server admin</option>
-                <option value="true">Global administrator</option>
-              </select>
-            </label>
-          </div>
-          <div class="actions">
-            <button class="btn success" onclick="saveAdmin()"><i data-lucide="user-plus"></i> Save Admin</button>
-          </div>
-          <div class="table" id="admin-list" style="margin-top:14px;"></div>
-        </div>
-      </div>
-    </section>
   </main>
 
   <div class="toast" id="toast"></div>
