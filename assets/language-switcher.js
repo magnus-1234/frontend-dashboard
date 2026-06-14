@@ -32,7 +32,36 @@
 
   function getSavedLanguage() {
     const saved = localStorage.getItem(STORAGE_KEY);
-    return languageMap.has(saved) ? saved : PAGE_LANGUAGE;
+    if (saved) {
+      return languageMap.has(saved) ? saved : PAGE_LANGUAGE;
+    }
+
+    if (navigator.languages && navigator.languages.length) {
+      for (let navLang of navigator.languages) {
+        let lower = navLang.toLowerCase();
+        if (lower === 'zh-cn') {
+          localStorage.setItem(STORAGE_KEY, 'zh-CN');
+          return 'zh-CN';
+        }
+        if (lower === 'zh-tw') {
+          localStorage.setItem(STORAGE_KEY, 'zh-TW');
+          return 'zh-TW';
+        }
+        
+        if (languageMap.has(navLang)) {
+          localStorage.setItem(STORAGE_KEY, navLang);
+          return navLang;
+        }
+        
+        let baseCode = navLang.split('-')[0].toLowerCase();
+        if (languageMap.has(baseCode)) {
+          localStorage.setItem(STORAGE_KEY, baseCode);
+          return baseCode;
+        }
+      }
+    }
+
+    return PAGE_LANGUAGE;
   }
 
   function setTranslateCookie(language) {
