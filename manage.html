@@ -8079,6 +8079,7 @@
         }
 
         async function openReminderModal(reminderId = null, presetId = null, editPreset = false) {
+            document.getElementById('reminder-modal').style.display = 'flex';
             currentLoadedPresetId = editPreset ? null : presetId;
             currentReminderId = reminderId;
             selectedReminderPreset = null;
@@ -8207,7 +8208,6 @@
                     handleSavePresetChange(savePreset);
                 }
             }
-            document.getElementById('reminder-modal').style.display = 'flex';
             const activePreset = presetId ? REMINDER_PRESETS.find(p => p.id === presetId) : null;
             if (activePreset?.target_time) {
                 requestAnimationFrame(() => {
