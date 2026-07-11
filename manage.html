@@ -8095,7 +8095,13 @@
                 submitBtn.onclick = () => updateReminder(reminderId);
                 
                 const d = parseReminderDate(r.reminder_time) || new Date();
-                document.getElementById('reminder-date').value = d.toISOString().split('T')[0];
+                const dateStr = d.toISOString().split('T')[0];
+                const dateInput = document.getElementById('reminder-date');
+                if (dateInput._flatpickr) {
+                    dateInput._flatpickr.setDate(dateStr);
+                } else {
+                    dateInput.value = dateStr;
+                }
                 
                 let h = d.getHours();
                 const m = String(d.getMinutes()).padStart(2, '0');
@@ -8138,7 +8144,13 @@
                 
                 document.getElementById('reminder-message').value = '';
                 const now = new Date();
-                document.getElementById('reminder-date').value = now.toISOString().split('T')[0];
+                const dateStr = now.toISOString().split('T')[0];
+                const dateInput = document.getElementById('reminder-date');
+                if (dateInput._flatpickr) {
+                    dateInput._flatpickr.setDate(dateStr);
+                } else {
+                    dateInput.value = dateStr;
+                }
                 
                 let h = now.getHours();
                 const m = String(now.getMinutes()).padStart(2, '0');
@@ -8177,7 +8189,12 @@
                 if (editPreset) {
                     const preset = REMINDER_PRESETS.find(p => p.id === presetId);
                     if (!preset?.target_time) {
-                        document.getElementById('reminder-date').value = '';
+                        const dateInput = document.getElementById('reminder-date');
+                        if (dateInput._flatpickr) {
+                            dateInput._flatpickr.clear();
+                        } else {
+                            dateInput.value = '';
+                        }
                     }
                     if (!preset?.channel_id) {
                         document.getElementById('reminder-channel').value = '';
@@ -8204,9 +8221,8 @@
             if (dateInput && window.flatpickr && !dateInput._flatpickr) {
                 flatpickr(dateInput, {
                     dateFormat: "Y-m-d",
-                    minDate: "today",
-                    defaultDate: "today",
-                    disableMobile: "true" // Use flatpickr on mobile instead of native
+                    defaultDate: dateInput.value || "today",
+                    disableMobile: "true"
                 });
             }
             updateReminderPreview();
