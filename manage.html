@@ -4852,6 +4852,11 @@
                         <strong id="qs-birthday-status" style="margin-left:auto;font-size:0.82rem;color:var(--text-muted);">Checking</strong>
                     </div>
                     <div style="display:flex;align-items:center;gap:10px;">
+                        <i data-lucide="alarm-clock" style="width:17px;color:#ef4444;"></i>
+                        <span style="font-size:0.9rem;">Reminder channel</span>
+                        <strong id="qs-reminder-status" style="margin-left:auto;font-size:0.82rem;color:var(--text-muted);">Checking</strong>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;">
                         <i data-lucide="shield-check" style="width:17px;color:var(--primary);"></i>
                         <span style="font-size:0.9rem;">Server registration</span>
                         <strong id="qs-registration-status" style="margin-left:auto;font-size:0.82rem;color:var(--text-muted);">Checking</strong>
@@ -5172,6 +5177,8 @@
 
             _setQuickSetupStatusText('qs-welcome-status', features.welcome_configured ? 'Ready' : 'Will create', features.welcome_configured ? '#34d399' : '#fbbf24');
             _setQuickSetupStatusText('qs-birthday-status', features.birthday_configured ? 'Ready' : 'Will create', features.birthday_configured ? '#34d399' : '#fbbf24');
+            _setQuickSetupStatusText('qs-reminder-status', features.reminder_configured ? 'Ready' : 'Will create', features.reminder_configured ? '#34d399' : '#fbbf24');
+
 
             if (regStatus === 'approved') {
                 _setQuickSetupStatusText('qs-registration-status', 'Already registered', '#34d399');
@@ -5187,23 +5194,23 @@
             fields.style.display = needsRegistration ? 'grid' : 'none';
 
             if (_quickSetupStatus.all_configured) {
-                msg.textContent = 'Already configured. Welcome, birthday, and approved server registration are ready for this server.';
+                msg.textContent = 'Already configured. Welcome, birthday, reminder, and approved server registration are ready for this server.';
                 submitBtn.disabled = true;
                 submitBtn.innerHTML = '<i data-lucide="check-check" style="width:15px;"></i> Already Configured';
             } else if (regStatus === 'approved') {
-                msg.textContent = 'This server is already registered. Quick Setup will only make sure welcome and birthday are configured.';
+                msg.textContent = 'This server is already registered. Quick Setup will only make sure welcome, birthday, and reminder channels are configured.';
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = '<i data-lucide="check" style="width:15px;"></i> OK';
             } else if (regStatus === 'pending') {
-                msg.textContent = 'Registration is already pending review. Welcome and birthday will work while you wait for approval.';
+                msg.textContent = 'Registration is already pending review. Welcome, birthday, and reminder will work while you wait for approval.';
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = '<i data-lucide="check" style="width:15px;"></i> OK';
             } else if (userReg.limit_reached && String(userReg.guild_id) !== String(guildId)) {
-                msg.textContent = `One server is already registered for your account${userReg.guild_name ? `: ${userReg.guild_name}` : ''}. Quick Setup will still provide welcome and birthday here.`;
+                msg.textContent = `One server is already registered for your account${userReg.guild_name ? `: ${userReg.guild_name}` : ''}. Quick Setup will still provide welcome, birthday, and reminder here.`;
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = '<i data-lucide="check" style="width:15px;"></i> OK';
             } else {
-                msg.textContent = 'Quick Setup will create welcome and birthday channels now, then submit this server registration for admin review. Other locked features unlock after approval.';
+                msg.textContent = 'Quick Setup will create welcome, birthday, and reminder channels now, then submit this server registration for admin review. Other locked features unlock after approval.';
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = '<i data-lucide="send" style="width:15px;"></i> OK';
             }
@@ -5216,6 +5223,7 @@
             document.getElementById('quick-setup-modal').style.display = 'flex';
             _setQuickSetupStatusText('qs-welcome-status', 'Checking', 'var(--text-muted)');
             _setQuickSetupStatusText('qs-birthday-status', 'Checking', 'var(--text-muted)');
+            _setQuickSetupStatusText('qs-reminder-status', 'Checking', 'var(--text-muted)');
             _setQuickSetupStatusText('qs-registration-status', 'Checking', 'var(--text-muted)');
             document.getElementById('qs-message').textContent = 'Checking current setup...';
             document.getElementById('qs-submit-btn').disabled = true;
