@@ -4804,7 +4804,7 @@
             </div>
             <div class="modal-footer">
                 <button onclick="closeAddMemberModal()" class="btn btn-secondary">Cancel</button>
-                <button onclick="confirmAddMember()" class="btn btn-primary" id="confirm-add-member-btn" disabled>
+                <button onclick="confirmAddMember()" class="btn btn-primary" id="confirm-add-member-btn">
                     <i data-lucide="user-check" style="width: 15px;"></i>
                     Add to Auto-Redeem
                 </button>
@@ -7207,7 +7207,7 @@
                         <img src="${escapeAttribute(avatar)}" class="ar-member-avatar" alt="Avatar" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
                         <div class="ar-member-info">
                             <h5>${escapeHTML(nick)}</h5>
-                            <p>Id: ${escapeHTML(fid)}} • Furnace Lv ${formattedFurnace}${addedAt ? ' • Added ' + addedAt : ''}</p>
+                            <p>Id: ${escapeHTML(fid)} • Furnace Lv ${formattedFurnace}${addedAt ? ' • Added ' + addedAt : ''}</p>
                         </div>
                         <button class="ar-member-remove" onclick="removeAutoRedeemMember('${escapeAttribute(fid)}', '${escapeAttribute(nick)}')" title="Remove member">
                             <i data-lucide="x" style="width: 14px;"></i>
@@ -7314,7 +7314,7 @@
         function openAddMemberModal() {
             pendingAddMember = null;
             document.getElementById('add-member-fid').value = '';
-            document.getElementById('confirm-add-member-btn').disabled = true;
+            document.getElementById('confirm-add-member-btn').disabled = false;
             document.getElementById('add-member-preview').innerHTML = `
                 <div style="color: var(--text-muted); font-size: 0.9rem; text-align: center; width: 100%;">
                     Enter an Id and search to verify the player
@@ -7360,14 +7360,14 @@
                              onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
                         <div class="player-meta">
                             <h4>${escapeHTML(res.data.nickname)}</h4>
-                            <p>Id: ${res.data.fid} • Furnace Lv ${formatFurnaceLevel(res.data.furnace_lv || 0)}</p>
+                            <p>Id: ${res.data.id || res.data.fid} • Furnace Lv ${formatFurnaceLevel(res.data.furnace_lv || 0)}</p>
                         </div>
                         <div style="margin-left: auto; color: #34d399;"><i data-lucide="check-circle" style="width: 22px;"></i></div>`;
                     confirmBtn.disabled = false;
                 }
             } catch (e) {
                 preview.innerHTML = '<div style="color: #ef4444; font-size: 0.9rem; text-align: center; width: 100%;">Player not found or error fetching data</div>';
-                confirmBtn.disabled = true;
+                confirmBtn.disabled = false;
                 pendingAddMember = null;
             } finally {
                 btn.disabled = false;
@@ -7377,7 +7377,17 @@
         }
 
         async function confirmAddMember() {
-            if (!pendingAddMember) return;
+            const fidInput = document.getElementById('add-member-fid');
+            const fid = fidInput.value.trim();
+
+            if (!pendingAddMember || (pendingAddMember.id || pendingAddMember.fid) != fid) {
+                if (!fid || fid.length !== 9 || !/^\d+$/.test(fid)) {
+                    showNotification('Please enter a valid 9-digit Id', true);
+                    return;
+                }
+                await lookupMemberForAdd();
+                if (!pendingAddMember) return;
+            }
 
             const confirmBtn = document.getElementById('confirm-add-member-btn');
             confirmBtn.disabled = true;
@@ -7388,13 +7398,13 @@
                 await fetchData(`/api/giftcodes/members/${guildId}/add`, {
                     method: 'POST',
                     body: JSON.stringify({
-                        fid: pendingAddMember.fid,
+                        id: pendingAddMember.id || pendingAddMember.fid || fid,
                         nickname: pendingAddMember.nickname || 'Unknown',
                         furnace_lv: pendingAddMember.furnace_lv || 0,
                         avatar_image: pendingAddMember.avatar_image || ''
                     })
                 });
-                showNotification(`âœ… ${pendingAddMember.nickname} added to auto-redeem!`);
+                showNotification(`✅ ${pendingAddMember.nickname || 'Member'} added to auto-redeem!`);
                 closeAddMemberModal();
                 loadAutoRedeemMembers();
             } catch (e) {
