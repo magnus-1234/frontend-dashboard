@@ -2,7 +2,9 @@
   "name": "frontend-dashboard",
   "compatibility_date": "2026-09-05",
   "compatibility_flags": ["nodejs_compat"],
+  "main": "worker.js",
   "assets": {
+    "binding": "ASSETS",
     "directory": "."
   }
 }

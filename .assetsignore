@@ -1,0 +1,12 @@
+.git/
+.wrangler/
+node_modules/
+*.py
+*.mjs
+*.log
+ecosystem.config.js
+render.yaml
+Dockerfile
+_redirects
+worker.js
+wrangler.jsonc
